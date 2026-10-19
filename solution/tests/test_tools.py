@@ -255,3 +255,26 @@ def test_unknown_id_error_lists_the_valid_ids():
     error = tools["cancel_my_reservation"].invoke({"reservation_id": "0"})["error"]
     assert "not a position" in error
     assert all(r["reservation_id"] in error for r in reservations)
+
+
+def test_model_provider_is_a_configuration_switch(monkeypatch):
+    from langchain_aws import BedrockEmbeddings, ChatBedrockConverse
+    from langchain_openai import ChatOpenAI
+    from agentic import config, llm
+    monkeypatch.setenv("AWS_ACCESS_KEY_ID", "test")  # no AWS call is made: clients are only built
+    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "test")
+    monkeypatch.setenv("OPENAI_API_KEY", "test")
+    try:
+        monkeypatch.setattr(config, "LLM_PROVIDER", "bedrock")
+        monkeypatch.setattr(config, "CHAT_MODEL", "us.anthropic.claude-3-5-haiku-20241022-v1:0")
+        monkeypatch.setattr(config, "EMBEDDING_MODEL", "amazon.titan-embed-text-v2:0")
+        llm.get_llm.cache_clear(); llm.get_embeddings.cache_clear()
+        assert isinstance(llm.get_llm(), ChatBedrockConverse)
+        assert isinstance(llm.get_embeddings(), BedrockEmbeddings)
+
+        monkeypatch.setattr(config, "LLM_PROVIDER", "openai")
+        monkeypatch.setattr(config, "CHAT_MODEL", "gpt-4o-mini")
+        llm.get_llm.cache_clear()
+        assert isinstance(llm.get_llm(), ChatOpenAI)
+    finally:
+        llm.get_llm.cache_clear(); llm.get_embeddings.cache_clear()

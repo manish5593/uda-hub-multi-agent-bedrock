@@ -1,5 +1,11 @@
 # UDA-Hub: Multi-Agent Customer Support with LangGraph
 
+> **Amazon Bedrock port.** This repository adds Amazon Bedrock as a model provider to
+> [uda-hub-multi-agent-support](https://github.com/manish5593/uda-hub-multi-agent-support). Set
+> `UDAHUB_LLM_PROVIDER=bedrock` to use Claude through the Bedrock Converse API, with Titan Text Embeddings V2 for
+> retrieval. **Status:** the provider switch is implemented and covered by the offline tests, but the system has not
+> yet been run against Bedrock. The demo results below are from the original OpenAI (`gpt-4o-mini`) version.
+
 UDA-Hub is an intelligent, multi-agent decision suite that resolves customer support tickets for the
 platforms it serves. It is built with LangGraph. The first integrated account is **CultPass**, a
 subscription for cultural experiences.
