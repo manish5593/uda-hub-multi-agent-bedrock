@@ -1,7 +1,8 @@
 """Factory helpers for chat and embedding models.
 
 Every agent gets its models from here, so switching provider is a configuration change:
-set UDAHUB_LLM_PROVIDER to "openai" or "bedrock" (see agentic/config.py).
+set UDAHUB_LLM_PROVIDER to "openai" or "bedrock", and optionally UDAHUB_EMBEDDING_PROVIDER to
+"openai", "bedrock" or "sagemaker" (see agentic/config.py).
 """
 from functools import lru_cache
 
@@ -24,7 +25,10 @@ def get_llm(temperature: float = 0.0) -> BaseChatModel:
 
 @lru_cache(maxsize=None)
 def get_embeddings() -> Embeddings:
-    if config.LLM_PROVIDER == "bedrock":
+    if config.EMBEDDING_PROVIDER == "sagemaker":
+        from agentic.sagemaker_embeddings import SageMakerEndpointEmbeddings
+        return SageMakerEndpointEmbeddings(config.SAGEMAKER_ENDPOINT, region_name=config.AWS_REGION)
+    if config.EMBEDDING_PROVIDER == "bedrock":
         from langchain_aws import BedrockEmbeddings
         return BedrockEmbeddings(model_id=config.EMBEDDING_MODEL, region_name=config.AWS_REGION, normalize=True)
     from langchain_openai import OpenAIEmbeddings

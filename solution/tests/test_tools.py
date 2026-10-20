@@ -261,16 +261,25 @@ def test_model_provider_is_a_configuration_switch(monkeypatch):
     from langchain_aws import BedrockEmbeddings, ChatBedrockConverse
     from langchain_openai import ChatOpenAI
     from agentic import config, llm
+    from agentic.sagemaker_embeddings import SageMakerEndpointEmbeddings
     monkeypatch.setenv("AWS_ACCESS_KEY_ID", "test")  # no AWS call is made: clients are only built
     monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "test")
     monkeypatch.setenv("OPENAI_API_KEY", "test")
     try:
         monkeypatch.setattr(config, "LLM_PROVIDER", "bedrock")
+        monkeypatch.setattr(config, "EMBEDDING_PROVIDER", "bedrock")
         monkeypatch.setattr(config, "CHAT_MODEL", "us.anthropic.claude-3-5-haiku-20241022-v1:0")
         monkeypatch.setattr(config, "EMBEDDING_MODEL", "amazon.titan-embed-text-v2:0")
         llm.get_llm.cache_clear(); llm.get_embeddings.cache_clear()
         assert isinstance(llm.get_llm(), ChatBedrockConverse)
         assert isinstance(llm.get_embeddings(), BedrockEmbeddings)
+
+        # Embeddings can come from a SageMaker endpoint while chat stays on Bedrock
+        monkeypatch.setattr(config, "EMBEDDING_PROVIDER", "sagemaker")
+        llm.get_embeddings.cache_clear()
+        embeddings = llm.get_embeddings()
+        assert isinstance(embeddings, SageMakerEndpointEmbeddings)
+        assert embeddings.endpoint_name == config.SAGEMAKER_ENDPOINT
 
         monkeypatch.setattr(config, "LLM_PROVIDER", "openai")
         monkeypatch.setattr(config, "CHAT_MODEL", "gpt-4o-mini")
@@ -278,3 +287,53 @@ def test_model_provider_is_a_configuration_switch(monkeypatch):
         assert isinstance(llm.get_llm(), ChatOpenAI)
     finally:
         llm.get_llm.cache_clear(); llm.get_embeddings.cache_clear()
+
+
+class _FakeSageMakerRuntime:
+    """Stands in for boto3's sagemaker-runtime client: returns one 2-d vector per input and records requests."""
+    def __init__(self):
+        self.requests = []
+
+    def invoke_endpoint(self, **request):
+        import io, json
+        self.requests.append(request)
+        inputs = json.loads(request["Body"])["inputs"]
+        return {"Body": io.BytesIO(json.dumps([[float(len(t)), 1.0] for t in inputs]).encode())}
+
+
+def test_sagemaker_embeddings_batch_requests_to_the_endpoint():
+    import json
+    from agentic.sagemaker_embeddings import SageMakerEndpointEmbeddings
+    runtime = _FakeSageMakerRuntime()
+    embeddings = SageMakerEndpointEmbeddings("kb-embeddings", region_name="us-east-1", batch_size=2, client=runtime)
+
+    vectors = embeddings.embed_documents(["a", "bb", "ccc"])
+    assert vectors == [[1.0, 1.0], [2.0, 1.0], [3.0, 1.0]]  # order kept across batches
+    assert [json.loads(r["Body"])["inputs"] for r in runtime.requests] == [["a", "bb"], ["ccc"]]
+    assert all(r["EndpointName"] == "kb-embeddings" for r in runtime.requests)
+    assert embeddings.embed_query("dddd") == [4.0, 1.0]
+    assert embeddings.embed_documents([]) == []
+
+
+def test_sagemaker_deploy_creates_model_config_and_endpoint(monkeypatch):
+    from deploy import sagemaker_embeddings as deploy
+    calls = []
+
+    class FakeSageMaker:
+        def __getattr__(self, name):
+            return lambda **kwargs: calls.append((name, kwargs))
+
+        def get_waiter(self, name):
+            return type("Waiter", (), {"wait": lambda _, **kwargs: calls.append(("wait", kwargs))})()
+
+    monkeypatch.setattr(deploy, "sagemaker_client", lambda region: FakeSageMaker())
+    deploy.main(["deploy", "--endpoint", "kb", "--region", "us-east-1", "--model", "BAAI/bge-small-en-v1.5",
+                 "--role-arn", "arn:aws:iam::123456789012:role/sm"])
+
+    assert [name for name, _ in calls] == ["create_model", "create_endpoint_config", "create_endpoint", "wait"]
+    model = calls[0][1]
+    assert model["ModelName"] == "kb-model"
+    assert model["PrimaryContainer"]["Image"].startswith("683313688378.dkr.ecr.us-east-1.amazonaws.com/tei-cpu:")
+    assert model["PrimaryContainer"]["Environment"] == {"HF_MODEL_ID": "BAAI/bge-small-en-v1.5"}
+    assert calls[1][1]["ProductionVariants"][0]["ModelName"] == "kb-model"
+    assert calls[2][1] == {"EndpointName": "kb", "EndpointConfigName": "kb-config"}

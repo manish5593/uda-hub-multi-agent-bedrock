@@ -3,8 +3,10 @@
 > **Amazon Bedrock port.** This repository adds Amazon Bedrock as a model provider to
 > [uda-hub-multi-agent-support](https://github.com/manish5593/uda-hub-multi-agent-support). Set
 > `UDAHUB_LLM_PROVIDER=bedrock` to use Claude through the Bedrock Converse API, with Titan Text Embeddings V2 for
-> retrieval. **Status:** the provider switch is implemented and covered by the offline tests, but the system has not
-> yet been run against Bedrock. The demo results below are from the original OpenAI (`gpt-4o-mini`) version.
+> retrieval. Retrieval embeddings can instead come from an Amazon SageMaker endpoint
+> ([below](#sagemaker-embeddings)). **Status:** both are implemented and covered by the offline tests, but the system
+> has not yet been run against Bedrock or SageMaker. The demo results below are from the original OpenAI
+> (`gpt-4o-mini`) version.
 
 UDA-Hub is an intelligent, multi-agent decision suite that resolves customer support tickets for the
 platforms it serves. It is built with LangGraph. The first integrated account is **CultPass**, a
@@ -45,9 +47,11 @@ solution/
 │   ├── agents/                  # classifier, supervisor, resolvers, quality gate, escalation, memory
 │   ├── tools/                   # CultPass tools, RAG retriever, ticket and memory storage
 │   ├── design/                  # architecture diagram, Mermaid graph and design document
-│   ├── config.py                # models, paths and thresholds
+│   ├── config.py                # model providers, models, paths and thresholds
+│   ├── llm.py                   # chat and embedding models for OpenAI, Bedrock or SageMaker
 │   └── state.py                 # graph state and structured-output schemas
 ├── data/                        # SQLAlchemy models, JSONL seed data and the SQLite databases
+├── deploy/                      # deploy and delete the SageMaker embedding endpoint
 └── tests/                       # offline unit and end-to-end tests
 ```
 
@@ -93,6 +97,29 @@ Programmatic use (from `solution/`):
 from agentic.workflow import orchestrator, process_ticket
 state = process_ticket("I'd like to cancel my reservation", "T-1", {"email": "cathy.bloom@florals.org"})
 print(state["final_response"])
+```
+
+### SageMaker embeddings
+
+Knowledge-base retrieval can use embeddings from an Amazon SageMaker endpoint, while the agents keep using OpenAI
+or Bedrock for chat. `solution/deploy/sagemaker_embeddings.py` deploys `BAAI/bge-small-en-v1.5` with Hugging Face
+Text Embeddings Inference on an `ml.m5.xlarge` CPU instance, using boto3 only. You need an IAM role that SageMaker
+can assume (with the `AmazonSageMakerFullAccess` policy, or one that allows pulling the image and writing logs).
+
+From `solution/`:
+
+```bash
+python -m deploy.sagemaker_embeddings deploy --role-arn arn:aws:iam::<account-id>:role/<role>   # 5-10 minutes
+python -m deploy.sagemaker_embeddings test     # embeds three sentences and prints their similarities
+```
+
+Then add `UDAHUB_EMBEDDING_PROVIDER=sagemaker` to `.env`. The 0.30 relevance threshold
+(`UDAHUB_RAG_MIN_SCORE`) was tuned for OpenAI embeddings, so check it against the retrieval cells in notebook 03.
+
+A real-time endpoint is billed for every hour it exists, whether or not it is used. Delete it when you're done:
+
+```bash
+python -m deploy.sagemaker_embeddings delete
 ```
 
 ## Testing

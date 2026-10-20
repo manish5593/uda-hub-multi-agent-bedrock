@@ -70,6 +70,9 @@ Put the key in `.env`, which git ignores, and never in `.env.example`, which is 
 To run it yourself, open it straight away: both databases are included. It runs the demo scenarios, then an
 interactive chat (`chat_interface(orchestrator, "1")`).
 
+To use Amazon Bedrock or a SageMaker embedding endpoint instead of OpenAI, see the
+[root README](../README.md#sagemaker-embeddings) and `.env.example`.
+
 The demos make real changes: bookings and cancellations, plus new tickets and memories. To reset the data, re-run:
 
 1. `01_external_db_setup.ipynb`, which rebuilds `data/external/cultpass.db`

@@ -15,16 +15,29 @@ GUEST_EXTERNAL_USER_ID = "guest"
 LLM_PROVIDER = os.getenv("UDAHUB_LLM_PROVIDER", "openai").lower()
 AWS_REGION = os.getenv("AWS_REGION", os.getenv("AWS_DEFAULT_REGION", "us-east-1"))
 
-_DEFAULT_MODELS = {
-    # chat model, embedding model
-    "openai": ("gpt-4o-mini", "text-embedding-3-small"),
+# Embeddings follow the chat provider unless set separately. "sagemaker" uses a SageMaker endpoint
+# deployed with deploy/sagemaker_embeddings.py.
+EMBEDDING_PROVIDER = os.getenv("UDAHUB_EMBEDDING_PROVIDER", LLM_PROVIDER).lower()
+
+_DEFAULT_CHAT_MODELS = {
+    "openai": "gpt-4o-mini",
     # Bedrock ids depend on the region and on which models the account has enabled
-    "bedrock": ("us.anthropic.claude-3-5-haiku-20241022-v1:0", "amazon.titan-embed-text-v2:0"),
+    "bedrock": "us.anthropic.claude-3-5-haiku-20241022-v1:0",
 }
-if LLM_PROVIDER not in _DEFAULT_MODELS:
-    raise ValueError(f"UDAHUB_LLM_PROVIDER must be one of {sorted(_DEFAULT_MODELS)}, not {LLM_PROVIDER!r}")
-CHAT_MODEL = os.getenv("UDAHUB_CHAT_MODEL", _DEFAULT_MODELS[LLM_PROVIDER][0])
-EMBEDDING_MODEL = os.getenv("UDAHUB_EMBEDDING_MODEL", _DEFAULT_MODELS[LLM_PROVIDER][1])
+_DEFAULT_EMBEDDING_MODELS = {
+    "openai": "text-embedding-3-small",
+    "bedrock": "amazon.titan-embed-text-v2:0",
+    # Hugging Face model id the SageMaker endpoint serves
+    "sagemaker": "BAAI/bge-small-en-v1.5",
+}
+if LLM_PROVIDER not in _DEFAULT_CHAT_MODELS:
+    raise ValueError(f"UDAHUB_LLM_PROVIDER must be one of {sorted(_DEFAULT_CHAT_MODELS)}, not {LLM_PROVIDER!r}")
+if EMBEDDING_PROVIDER not in _DEFAULT_EMBEDDING_MODELS:
+    raise ValueError(f"UDAHUB_EMBEDDING_PROVIDER must be one of {sorted(_DEFAULT_EMBEDDING_MODELS)}, "
+                     f"not {EMBEDDING_PROVIDER!r}")
+CHAT_MODEL = os.getenv("UDAHUB_CHAT_MODEL", _DEFAULT_CHAT_MODELS[LLM_PROVIDER])
+EMBEDDING_MODEL = os.getenv("UDAHUB_EMBEDDING_MODEL", _DEFAULT_EMBEDDING_MODELS[EMBEDDING_PROVIDER])
+SAGEMAKER_ENDPOINT = os.getenv("UDAHUB_SAGEMAKER_ENDPOINT", "udahub-embeddings")
 
 # Decision thresholds
 CLASSIFIER_MIN_CONFIDENCE = float(os.getenv("UDAHUB_CLASSIFIER_MIN_CONFIDENCE", 0.5))
