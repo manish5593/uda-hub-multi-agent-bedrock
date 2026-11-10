@@ -43,3 +43,8 @@ def isolated_dbs(tmp_path, monkeypatch):
     _move_dates_to_today(config.CULTPASS_DB_PATH)
     monkeypatch.setattr(config, "EVENT_LOG_PATH", tmp_path / "events.jsonl")
     yield
+
+
+def pytest_configure(config):
+    # Using a LangGraph API deprecated in 1.x (to be removed in 2.0) fails the tests instead of only warning
+    config.addinivalue_line("filterwarnings", "error::langgraph.warnings.LangGraphDeprecatedSinceV10")

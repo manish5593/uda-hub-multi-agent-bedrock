@@ -96,3 +96,8 @@ def remote_services(cultpass_client, ticket_client, knowledge_client):
     yield calls
     for name in ("cultpass", "tickets", "knowledge"):
         http.use_client(name, None)
+
+
+def pytest_configure(config):
+    # Using a LangGraph API deprecated in 1.x (to be removed in 2.0) fails the tests instead of only warning
+    config.addinivalue_line("filterwarnings", "error::langgraph.warnings.LangGraphDeprecatedSinceV10")

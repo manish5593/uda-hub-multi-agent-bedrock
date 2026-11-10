@@ -163,7 +163,6 @@ reveal what the real model will do.
   through. An evaluation set of conversations and expected memories would measure it.
 - **No evaluation suite yet.** The next step is a labelled ticket set to measure routing accuracy and
   answer faithfulness over many runs, rather than inspecting individual runs.
-- **`create_react_agent` is deprecated** in LangGraph 1.x and should move to `langchain.agents.create_agent`.
 - **Single platform.** Knowledge search already works per account, but the account tools are CultPass-specific.
 
 ## 8. Repository

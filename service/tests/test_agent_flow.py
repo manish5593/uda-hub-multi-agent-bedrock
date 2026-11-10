@@ -99,7 +99,7 @@ def test_conversation_continues_across_turns_and_identifies_the_customer(agent_c
     llm.outputs[TicketClassification] = classification(issue_type="reservation", requires_account_action=True,
                                                        customer_email="bob.stone@granite.com")
 
-    def fake_react_agent(*args, tools, **kwargs):
+    def fake_agent(*args, tools, **kwargs):
         class _Agent:
             def invoke(self, payload, config=None):
                 by_name = {t.name: t for t in tools}
@@ -109,7 +109,7 @@ def test_conversation_continues_across_turns_and_identifies_the_customer(agent_c
                                      ToolMessage(content=str(reservations), tool_call_id="c1"),
                                      AIMessage(content="Which reservation should I cancel?")]}
         return _Agent()
-    monkeypatch.setattr(account_agent, "create_react_agent", fake_react_agent)
+    monkeypatch.setattr(account_agent, "create_agent", fake_agent)
     llm.outputs[ResolutionAssessment] = ResolutionAssessment(
         confidence=0.9, grounded=True, answered_by_evidence=False, needs_human=False, awaiting_customer=True,
         reason="clarifying question")
