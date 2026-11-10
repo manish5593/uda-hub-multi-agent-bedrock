@@ -1,0 +1,144 @@
+# UDA-Hub as microservices. From the service/ folder:
+#   cp .env.example .env && cp llm.env.example llm.env   # then fill both in
+#   docker compose up --build
+#   docker compose --profile monitoring up --build        # also Prometheus on :9090
+# Only the gateway is published (port 8080); everything else is on the internal network.
+name: udahub
+
+x-backend: &backend
+  build:
+    context: ..
+    dockerfile: service/Dockerfile
+  image: udahub-backend:latest
+  restart: unless-stopped
+  networks: [internal]
+
+x-healthcheck: &healthcheck
+  test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+  interval: 10s
+  timeout: 5s
+  retries: 5
+  start_period: 20s
+
+x-common-env: &common-env
+  INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:?set INTERNAL_API_TOKEN in service/.env}
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in service/.env}
+      CULTPASS_DB_PASSWORD: ${CULTPASS_DB_PASSWORD:?}
+      TICKETS_DB_PASSWORD: ${TICKETS_DB_PASSWORD:?}
+      KNOWLEDGE_DB_PASSWORD: ${KNOWLEDGE_DB_PASSWORD:?}
+      AGENT_STATE_DB_PASSWORD: ${AGENT_STATE_DB_PASSWORD:?}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./postgres/init-databases.sh:/docker-entrypoint-initdb.d/init-databases.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks: [internal]
+
+  # One-shot job: creates the tables and loads the demo data into empty databases
+  seed:
+    <<: *backend
+    restart: "no"
+    command: ["python", "-m", "service.scripts.seed"]
+    environment:
+      CULTPASS_DB_URL: postgresql+psycopg://cultpass_svc:${CULTPASS_DB_PASSWORD}@db:5432/cultpass
+      TICKETS_DB_URL: postgresql+psycopg://tickets_svc:${TICKETS_DB_PASSWORD}@db:5432/tickets
+      KNOWLEDGE_DB_URL: postgresql+psycopg://knowledge_svc:${KNOWLEDGE_DB_PASSWORD}@db:5432/knowledge
+    depends_on:
+      db: {condition: service_healthy}
+
+  cultpass:
+    <<: *backend
+    command: ["uvicorn", "service.cultpass_service.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    environment:
+      <<: *common-env
+      CULTPASS_DB_URL: postgresql+psycopg://cultpass_svc:${CULTPASS_DB_PASSWORD}@db:5432/cultpass
+    healthcheck: *healthcheck
+    depends_on:
+      seed: {condition: service_completed_successfully}
+
+  tickets:
+    <<: *backend
+    command: ["uvicorn", "service.ticket_service.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    environment:
+      <<: *common-env
+      UDAHUB_DB_URL: postgresql+psycopg://tickets_svc:${TICKETS_DB_PASSWORD}@db:5432/tickets
+    healthcheck: *healthcheck
+    depends_on:
+      seed: {condition: service_completed_successfully}
+
+  knowledge:
+    <<: *backend
+    command: ["uvicorn", "service.knowledge_service.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    # Embedding model settings and credentials
+    env_file: [llm.env]
+    environment:
+      <<: *common-env
+      UDAHUB_DB_URL: postgresql+psycopg://knowledge_svc:${KNOWLEDGE_DB_PASSWORD}@db:5432/knowledge
+    healthcheck: *healthcheck
+    depends_on:
+      seed: {condition: service_completed_successfully}
+
+  agent:
+    <<: *backend
+    command: ["uvicorn", "service.agent_service.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    # Chat model settings and credentials
+    env_file: [llm.env]
+    environment:
+      <<: *common-env
+      CULTPASS_SERVICE_URL: http://cultpass:8000
+      TICKET_SERVICE_URL: http://tickets:8000
+      KNOWLEDGE_SERVICE_URL: http://knowledge:8000
+      AGENT_STATE_DB_URL: postgresql://agent_state_svc:${AGENT_STATE_DB_PASSWORD}@db:5432/agent_state
+    volumes:
+      - agent-logs:/app/logs
+    healthcheck: *healthcheck
+    depends_on:
+      db: {condition: service_healthy}
+      cultpass: {condition: service_healthy}
+      tickets: {condition: service_healthy}
+      knowledge: {condition: service_healthy}
+
+  gateway:
+    build:
+      context: ..
+      dockerfile: service/gateway/Dockerfile
+    image: udahub-gateway:latest
+    restart: unless-stopped
+    environment:
+      <<: *common-env
+      GATEWAY_API_KEYS: ${GATEWAY_API_KEYS:?set GATEWAY_API_KEYS in service/.env}
+      GATEWAY_RATE_LIMIT_PER_MINUTE: ${GATEWAY_RATE_LIMIT_PER_MINUTE:-30}
+      AGENT_SERVICE_URL: http://agent:8000
+      TICKET_SERVICE_URL: http://tickets:8000
+    ports:
+      - "${GATEWAY_PORT:-8080}:8000"
+    healthcheck: *healthcheck
+    depends_on:
+      agent: {condition: service_healthy}
+    networks: [internal]
+
+  prometheus:
+    profiles: [monitoring]
+    image: prom/prometheus:v2.55.1
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    networks: [internal]
+
+networks:
+  internal: {}
+
+volumes:
+  pgdata: {}
+  agent-logs: {}

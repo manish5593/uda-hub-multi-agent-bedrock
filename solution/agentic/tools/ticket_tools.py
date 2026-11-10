@@ -4,6 +4,7 @@ import uuid
 from typing import Optional
 
 from agentic import config
+from agentic.remote.http import remote
 from agentic.tools.db import session_scope, udahub_engine
 from data.models import udahub
 
@@ -41,6 +42,7 @@ def _ticket_info(ticket: udahub.Ticket) -> dict:
     }
 
 
+@remote("tickets")
 def get_or_create_ticket(ticket_id: str, metadata: Optional[dict] = None) -> dict:
     """Load a ticket, creating it (and its user) if it doesn't exist yet.
 
@@ -74,11 +76,21 @@ def get_or_create_ticket(ticket_id: str, metadata: Optional[dict] = None) -> dic
         return _ticket_info(ticket)
 
 
+@remote("tickets")
+def get_ticket(ticket_id: str) -> Optional[dict]:
+    """The ticket's details, or None if it doesn't exist."""
+    with session_scope(udahub_engine()) as session:
+        ticket = session.get(udahub.Ticket, ticket_id)
+        return _ticket_info(ticket) if ticket else None
+
+
+@remote("tickets")
 def ticket_exists(ticket_id: str) -> bool:
     with session_scope(udahub_engine()) as session:
         return session.get(udahub.Ticket, ticket_id) is not None
 
 
+@remote("tickets")
 def link_ticket_to_customer(ticket_id: str, external_user_id: str, user_name: str) -> str:
     """Re-assign a guest ticket to an identified customer. Returns the udahub user id."""
     with session_scope(udahub_engine()) as session:
@@ -88,6 +100,7 @@ def link_ticket_to_customer(ticket_id: str, external_user_id: str, user_name: st
         return user.user_id
 
 
+@remote("tickets")
 def add_message(ticket_id: str, role: str, content: str) -> None:
     with session_scope(udahub_engine()) as session:
         session.add(
@@ -100,6 +113,7 @@ def add_message(ticket_id: str, role: str, content: str) -> None:
         )
 
 
+@remote("tickets")
 def update_ticket_metadata(
     ticket_id: str, status: Optional[str] = None, issue_type: Optional[str] = None, tags: Optional[str] = None
 ) -> None:
@@ -118,6 +132,7 @@ def update_ticket_metadata(
             meta.tags = ", ".join(existing + new)
 
 
+@remote("tickets")
 def get_ticket_messages(ticket_id: str) -> list[dict]:
     with session_scope(udahub_engine()) as session:
         rows = (
@@ -129,6 +144,7 @@ def get_ticket_messages(ticket_id: str) -> list[dict]:
         return [{"role": m.role.value, "content": m.content} for m in rows]
 
 
+@remote("tickets")
 def get_prior_tickets(udahub_user_id: str, exclude_ticket_id: str, limit: int = config.MAX_PRIOR_TICKETS) -> list[dict]:
     """Summaries of the customer's previous tickets (long-term memory of past resolutions)."""
     with session_scope(udahub_engine()) as session:
@@ -164,6 +180,7 @@ def get_prior_tickets(udahub_user_id: str, exclude_ticket_id: str, limit: int = 
 # Long-term memory
 # ---------------------------------------------------------------------------
 
+@remote("tickets")
 def get_memories(udahub_user_id: str, limit: int = config.MAX_MEMORIES) -> list[dict]:
     with session_scope(udahub_engine()) as session:
         rows = (
@@ -181,6 +198,7 @@ def _normalize(text: str) -> str:
     return " ".join(re.sub(r"[^\w\s]", " ", text.casefold()).split())
 
 
+@remote("tickets")
 def save_memory(account_id: str, udahub_user_id: str, category: str, content: str, source_ticket_id: str) -> bool:
     """Store a memory unless the customer already has the same one. Returns True if stored.
 

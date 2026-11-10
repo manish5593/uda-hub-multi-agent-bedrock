@@ -1,0 +1,7 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: udahub
+    static_configs:
+      - targets: ["gateway:8000", "agent:8000", "cultpass:8000", "tickets:8000", "knowledge:8000"]

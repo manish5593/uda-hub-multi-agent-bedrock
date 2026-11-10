@@ -10,6 +10,7 @@ from langchain_core.vectorstores import InMemoryVectorStore
 
 from agentic import config
 from agentic.llm import get_embeddings
+from agentic.remote.http import is_remote
 from agentic.tools.db import session_scope, udahub_engine
 from data.models import udahub
 
@@ -117,6 +118,10 @@ _retrievers: dict[str, KnowledgeRetriever] = {}
 
 
 def get_retriever(account_id: str) -> KnowledgeRetriever:
+    if is_remote("knowledge"):
+        # The index lives in the Knowledge service (KNOWLEDGE_SERVICE_URL); see agentic/remote
+        from agentic.remote.knowledge import RemoteRetriever
+        return RemoteRetriever(account_id)
     if account_id not in _retrievers:
         _retrievers[account_id] = KnowledgeRetriever(account_id)
     return _retrievers[account_id]
