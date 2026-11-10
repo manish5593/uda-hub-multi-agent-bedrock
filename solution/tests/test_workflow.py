@@ -3,9 +3,11 @@
 They exercise the real graph, routing, tools, DB persistence and memory; only the
 model's outputs are scripted per scenario.
 """
+import itertools
 import json
 
 import pytest
+from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 from langchain_core.messages import AIMessage, ToolMessage
 from langgraph.checkpoint.memory import MemorySaver
 
@@ -123,7 +125,7 @@ def test_multi_turn_identification_and_short_term_memory(run, monkeypatch):
                                      ToolMessage(content="[]", tool_call_id="c1"),
                                      AIMessage(content="Which reservation should I cancel?")]}
         return _Agent()
-    monkeypatch.setattr(account_agent, "create_react_agent", fake_agent)
+    monkeypatch.setattr(account_agent, "create_agent", fake_agent)
     second = process_ticket("It's bob.stone@granite.com", "t-guest", agent=graph)
 
     assert second["customer"]["name"] == "Bob Stone"
@@ -134,6 +136,46 @@ def test_multi_turn_identification_and_short_term_memory(run, monkeypatch):
     # long-term memory recalled after identification
     assert any("music" in m for m in second["memories"])
     assert second["prior_tickets"][0]["ticket_id"] == "past-bob-login"
+
+
+class ToolCallingLLM(GenericFakeChatModel):
+    """A chat model that replays scripted messages (tool calls included) inside the real create_agent loop."""
+
+    def bind_tools(self, tools, **kwargs):
+        return self
+
+
+def call(name, i=0, **args):
+    return AIMessage(content="", tool_calls=[{"id": f"{name}-{i}", "name": name, "args": args}])
+
+
+def test_account_agent_runs_real_tools_through_create_agent(run, monkeypatch):
+    run(classification=classification(issue_type="reservation", requires_account_action=True))
+    graph = build_graph(MemorySaver())
+    model = ToolCallingLLM(messages=iter([call("get_my_reservations"),
+                                          AIMessage(content="You have reservations; which one should I cancel?")]))
+    monkeypatch.setattr(account_agent, "get_llm", lambda *a, **k: model)
+
+    state = process_ticket("Show my reservations", "t-real-agent", {"email": "bob.stone@granite.com"}, agent=graph)
+
+    assert state["route"] == "account_agent"
+    [action] = state["actions_taken"]
+    assert action["tool"] == "get_my_reservations"
+    # the real tool ran against the CultPass data for Bob
+    assert action["result"] and all("reservation_id" in r for r in action["result"])
+    assert "which one should I cancel" in state["final_response"]
+
+
+def test_account_agent_gives_up_when_it_never_finishes(run, monkeypatch):
+    run(classification=classification(issue_type="subscription", requires_account_action=True))
+    graph = build_graph(MemorySaver())
+    model = ToolCallingLLM(messages=(call("get_my_account", i) for i in itertools.count()))
+    monkeypatch.setattr(account_agent, "get_llm", lambda *a, **k: model)
+
+    state = process_ticket("What's my plan?", "t-loop", {"email": "bob.stone@granite.com"}, agent=graph)
+
+    assert any("[account_agent] gave up after too many steps" in line for line in state["trace"])
+    assert not state.get("actions_taken")
 
 
 def test_refund_request_forces_escalation_and_memory_is_stored(run, monkeypatch):
@@ -152,7 +194,7 @@ def test_refund_request_forces_escalation_and_memory_is_stored(run, monkeypatch)
                                      ToolMessage(content=json.dumps(result), tool_call_id="r1"),
                                      AIMessage(content=f"I've registered request {result['refund_request_id']}.")]}
         return _Agent()
-    monkeypatch.setattr(account_agent, "create_react_agent", fake_agent)
+    monkeypatch.setattr(account_agent, "create_agent", fake_agent)
 
     state = process_ticket("I was charged twice", "t-refund", {"email": "bob.stone@granite.com"}, agent=graph)
     assert state["route"] == "account_agent"
@@ -282,7 +324,7 @@ def test_tool_usage_is_logged(run, monkeypatch):
                                      ToolMessage(content=json.dumps(result), tool_call_id="r1"),
                                      AIMessage(content="Registered.")]}
         return _Agent()
-    monkeypatch.setattr(account_agent, "create_react_agent", fake_agent)
+    monkeypatch.setattr(account_agent, "create_agent", fake_agent)
     process_ticket("I was charged twice", "t-log-tools", {"email": "bob.stone@granite.com"}, agent=graph)
 
     from agentic.event_log import search_events

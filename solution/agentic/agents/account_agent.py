@@ -2,8 +2,8 @@
 import json
 
 from langchain_core.messages import AIMessage, SystemMessage, ToolMessage
+from langchain.agents import create_agent
 from langgraph.errors import GraphRecursionError
-from langgraph.prebuilt import create_react_agent
 
 from agentic.agents.common import add_trace, conversation, customer_context_block
 from agentic.llm import get_llm
@@ -58,10 +58,10 @@ def resolve_with_account_tools(state: dict) -> dict:
     tools = build_account_tools(customer["external_user_id"], state["ticket_id"])
     tools.append(build_knowledge_tool(customer["account_id"]))
 
-    agent = create_react_agent(
+    agent = create_agent(
         model=get_llm(),
         tools=tools,
-        prompt=SystemMessage(content=ACCOUNT_PROMPT.format(
+        system_prompt=SystemMessage(content=ACCOUNT_PROMPT.format(
             language=classification.get("language", "English"),
             context=customer_context_block(state),
             summary=classification.get("summary", ""),
