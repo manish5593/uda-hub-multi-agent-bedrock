@@ -132,6 +132,21 @@ python -m pytest tests
   - repeat issues, from a previous ticket and from the same ticket, that go straight to a human
   - a structured, searchable event for every decision and tool call
   - an LLM outage or unknown account that gets a fallback reply instead of a crash, and an empty message
+  - the real `create_agent` loop with a scripted tool-calling model, and its step limit
+- `tests/test_evals.py` checks the evaluation suite's own scoring and runner.
+
+## Evaluation
+
+The tests script the model, so they can't say how often the real model gets a ticket right. The evaluation
+suite runs 36 labelled tickets through the whole system with the real model, several times each, and
+reports how often the classification, route, outcome, escalation team, tool calls and reply are right. Replies
+are checked by an LLM judge for faithfulness to the evidence and for the points each case expects.
+
+```bash
+python -m evals.run            # needs the model settings in .env; 3 runs per case
+```
+
+See [`evals/README.md`](evals/README.md) for the checks, the case format, and the options.
 
 ## Folder guide
 
@@ -147,6 +162,7 @@ python -m pytest tests
 | [`data/external/`](data/external/README.md) | `cultpass.db`, the JSONL seed data, the demo customers, resetting, and adding data |
 | `data/models/` | SQLAlchemy models for both databases |
 | `tests/` | Unit tests and end-to-end graph tests |
+| [`evals/`](evals/README.md) | Evaluation suite: labelled cases (`cases.json`), the runner, scoring and LLM judge |
 | `utils.py` | Course-provided helpers, including `chat_interface` |
 | `.env.example` | Template for `.env`, which holds your `OPENAI_API_KEY` |
 

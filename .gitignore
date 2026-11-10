@@ -7,3 +7,4 @@ __pycache__/
 .pytest_cache/
 solution/logs/
 llm.env
+solution/evals/results/
