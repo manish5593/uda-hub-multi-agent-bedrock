@@ -1,0 +1,39 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            service/requirements.txt
+
+      # The service tests import the agent package from solution/, so they need both sets of dependencies.
+      - name: Install dependencies
+        run: pip install -r requirements.txt -r service/requirements.txt
+
+      # Offline: the LLM is scripted and every test uses a temporary copy of the SQLite databases,
+      # so no API keys, Docker or Postgres are needed.
+      - name: Solution tests
+        working-directory: solution
+        run: python -m pytest tests -q
+
+      - name: Service tests
+        run: python -m pytest service/tests -q
