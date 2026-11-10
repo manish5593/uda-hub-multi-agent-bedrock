@@ -43,7 +43,7 @@ by the supervisor and the memory nodes.
 
 ## `knowledge_tools.py`: RAG over the knowledge base
 
-- **Retriever:** `KnowledgeRetriever` indexes the account's `knowledge` articles in an `InMemoryVectorStore` with OpenAI embeddings (`text-embedding-3-small`).
+- **Retriever:** `KnowledgeRetriever` indexes the account's `knowledge` articles in an `InMemoryVectorStore` with the configured embedding model: OpenAI `text-embedding-3-small` by default, Amazon Bedrock Titan, or a SageMaker endpoint (see `agentic/config.py`).
 - **Search:** `search()` returns the top 3 articles scoring at least 0.30 cosine similarity. The threshold can be changed with the `UDAHUB_RAG_MIN_SCORE` environment variable.
 - **Fallback:** if embeddings are unavailable, for example offline or without `numpy`, it falls back to IDF keyword scoring with light stemming and a 0.10 threshold. A warning is logged when this happens. The fallback also lets the tests run offline.
 - **Caching:** `get_retriever()` builds each account's index once.

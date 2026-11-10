@@ -11,15 +11,17 @@ sessions.
 | | |
 |---|---|
 | **Architecture** | Supervisor pattern in LangGraph: 7 agents in one `StateGraph` (11 nodes, 16 edges) |
-| **Models** | `gpt-4o-mini` for every agent; `text-embedding-3-small` for retrieval |
-| **Data** | Two SQLite databases: `cultpass.db` (customers, subscriptions, experiences, reservations) and `udahub.db` (tickets, messages, 18 knowledge articles, long-term memory) |
+| **Models** | `gpt-4o-mini` for every agent and `text-embedding-3-small` for retrieval (the demo run). Claude on Amazon Bedrock, Titan embeddings and a SageMaker embedding endpoint are implemented as alternatives, but not yet run |
+| **Data** | Two SQLite databases: `cultpass.db` (customers, subscriptions, experiences, reservations) and `udahub.db` (tickets, messages, 18 knowledge articles, long-term memory). As microservices, the same tables in Postgres, one database per service |
+| **Deployment** | `service/`: an API gateway and four services (agent, CultPass, tickets, knowledge) with Postgres, Alembic migrations, Docker Compose, and Prometheus with a Grafana dashboard (section 4) |
 | **Demonstration** | `solution/03_agentic_app.ipynb`, committed with the outputs of a real-model run: 13 scenarios, 5 edge cases, and demos of routing, retrieval, tools, memory and logs |
-| **Tests** | 42 offline tests (24 unit, 18 end-to-end through the graph with a scripted fake LLM), no API key needed |
-| **Environment** | Python 3.11, LangGraph 1.2.15, LangChain 1.4.6, langchain-openai 1.7.2, SQLAlchemy 2.1 |
+| **Tests** | 70 offline tests in `solution/tests` (24 unit, 20 end-to-end through the graph with a scripted model, 26 for the evaluation suite) and 58 in `service/tests` (services, the full HTTP flow, migrations on SQLite and Postgres). No API key needed; GitHub Actions runs them on every pull request |
+| **Evaluation** | `solution/evals`: 36 labelled tickets run against the real model, scored in code and by an LLM judge (section 4). Built, but not yet run: the course API key was suspended |
+| **Environment** | Python 3.11, LangGraph 1.2.20, LangChain 1.4.9, langchain-openai 1.7.4, langchain-aws 1.9.2, SQLAlchemy 2.1, FastAPI 0.162, Postgres 16 |
 
 The main lesson matched what I'd learned building earlier agent systems: **the LLM proposes, code decides.**
 Almost every problem found by running the system against the real model was a decision left to the model that
-it made inconsistently. Each was fixed by moving that decision into code, which can be tested (section 5).
+it made inconsistently. Each was fixed by moving that decision into code, which can be tested (section 6).
 
 ## 2. Architecture
 
@@ -33,7 +35,7 @@ One graph run handles one customer message:
 | `classifier` | Yes, structured output | Issue type (11 categories), urgency, sentiment, language, whether account action or a human is needed, confidence |
 | `supervisor` | No | Identifies a guest from an email in their message, then routes with plain-code rules |
 | `knowledge_agent` | Yes | RAG over the knowledge base, answering only from the retrieved articles |
-| `account_agent` | Yes, ReAct agent | CultPass tools bound to the current customer |
+| `account_agent` | Yes, ReAct agent (`create_agent`) | CultPass tools bound to the current customer |
 | `quality_gate` | Yes, structured output, plus rules | Checks the draft's grounding and confidence against the evidence, then decides in code whether to send it or escalate |
 | `escalation_agent` | Yes, structured output | Picks the team and priority, writes a handoff note, and replies to the customer |
 | `request_info` | Only to translate | Asks a guest for their email, or asks what they need if the message was empty |
@@ -67,7 +69,7 @@ to the knowledge agent.
 Articles are embedded into an in-memory vector store, and retrieval keeps the top 3 with a cosine similarity of
 at least 0.30. If none qualifies, no answer is drafted and the ticket escalates. If articles are found, the quality gate
 checks both that the answer is **grounded** in them and that they **actually answer the question**. That catches
-weakly related articles (section 5). If embeddings are unavailable, retrieval falls back to keyword scoring.
+weakly related articles (section 6). If embeddings are unavailable, retrieval falls back to keyword scoring.
 
 ### Tools
 
@@ -85,7 +87,7 @@ refund requests, and knowledge search. They wrap the database through SQLAlchemy
 | Kind | Where | Used for |
 |---|---|---|
 | State | `UdaHubState` | Passing the classification, route, evidence and assessment between nodes within a run |
-| Short-term | `MemorySaver` checkpointer, keyed by `thread_id` (= ticket id) | Follow-ups such as "cancel *that one*"; inspecting a ticket's messages, tool usage and node order |
+| Short-term | Checkpointer keyed by `thread_id` (= ticket id): `MemorySaver` in the notebooks, `PostgresSaver` in the agent service | Follow-ups such as "cancel *that one*"; inspecting a ticket's messages, tool usage and node order |
 | Long-term | `udahub.db` | Preferences and reported issues (`customer_memory`), previous tickets with their replies, and the full message log. It's recalled on every new ticket, and after a restart it rebuilds the conversation. |
 
 ### Logging and failure handling
@@ -96,7 +98,48 @@ with their arguments and success, the assessment, and the escalation team. `sear
 field. `process_ticket()` catches failures such as an LLM outage or an unknown account. It logs them, flags the
 ticket for a human, and sends a fallback reply instead of crashing.
 
-## 4. Results
+## 4. Deployment and evaluation
+
+### Microservices
+
+`service/` runs the same graph as four services behind an API gateway. Each data function in `agentic/tools` runs
+locally against its database, or over HTTP against the service that owns the data, depending on configuration.
+So the agents, prompts, tools and rules are unchanged, and each business rule is still written once.
+
+| Part | What it adds |
+|---|---|
+| `gateway` | The only public endpoint: API keys, a rate limit per key, request ids, and replies without internal traces |
+| `agent` | Runs the workflow. Conversations are kept in Postgres (`PostgresSaver`), so they survive restarts and any replica can continue any ticket; an advisory lock stops two messages on one ticket from running at once |
+| `cultpass`, `tickets`, `knowledge` | Own their data, each in its own Postgres database and role |
+| `migrate`, `seed` jobs | Alembic migrations, one history per database, then the demo data. Databases created before the migrations are adopted, not recreated |
+| Monitoring | Request metrics on every service, plus what the agent did with each message (outcome, route, escalation team and priority, tools). Prometheus collects them, and a provisioned Grafana dashboard shows support outcomes, traffic, errors and latency |
+
+The whole stack has been built and run with Docker Compose. That run used a placeholder model key, so every
+message got the fallback reply; the gateway, health checks, migrations, seeding, metrics and dashboard worked.
+The architecture diagram is in [`service/README.md`](service/README.md#architecture).
+
+### Evaluation suite
+
+The tests script the model, so they check the code around it but can't say how often the real model gets a
+ticket right. `solution/evals` runs 36 labelled tickets through the whole system with the real model, several
+times each:
+
+- **Cases** cover knowledge questions, questions no article answers, account actions (including refused
+  bookings and a two-message cancellation), policy escalations, routing edge cases, Portuguese and Spanish, and
+  safety (a prompt injection, another customer's data, a venue incident). Labels come from the routing rules,
+  the articles and the demo customers, and are validated against the values the code uses.
+- **Checks in code:** issue type, route, outcome, escalation team, tool calls, and forbidden text.
+- **Checks by an LLM judge:** whether the reply is supported by the evidence, and whether it makes each case's
+  expected points.
+- **Report:** pass rates per check, category and case; every failed check with its route, outcome and reply;
+  and cases that pass in some runs but fail in others.
+
+Each run starts from fresh copies of the databases. A run whose message hit the fallback reply is reported as
+errored and left out of the rates, and the runner checks every model with one small call before starting. Both
+came from the first real attempt: the course API key had been suspended, and the outage was being scored as
+wrong routes.
+
+## 5. Results
 
 Results from the committed run of notebook 03 against the real model:
 
@@ -121,7 +164,7 @@ appropriate team. The 5 edge cases are an empty message, gibberish, an unknown c
 a simulated LLM outage. All were handled without a crash. The routes and outcomes above were the same across repeated runs; the
 model's wording varies.
 
-## 5. Challenges and solutions
+## 6. Challenges and solutions
 
 These came from running the system against the real model, not from the tests. A scripted fake LLM can't
 reveal what the real model will do.
@@ -139,7 +182,16 @@ reveal what the real model will do.
 | **Crashes.** An unexpected tool error, an unknown account, or an LLM outage ended the run without a reply. | Tools return structured errors. `process_ticket` catches failures, flags the ticket, and sends a fallback reply. |
 | **Logs were free text**, so they couldn't be searched across tickets. | Structured JSONL events with fixed fields, and `search_events()`. |
 
-## 6. Lessons
+Running the microservices and the evaluation suite for the first time found these:
+
+| Problem found | Fix |
+|---|---|
+| **The dashboard missed the first event of each kind.** Prometheus's `increase()` can't see a counter series' first increment, and series were only created on first use, so the first escalation to each team was never counted. | The agent service creates every known series at zero when it starts. A test checks the counters after an escalated turn. |
+| **An outage looked like wrong answers.** With the suspended API key, every message got the fallback reply. The evaluation scored those as wrong routes, and a safety case that expects nothing to happen "passed". | Runs that hit the fallback are reported as errored and kept out of the rates, and the runner checks every model before starting. |
+| **The model never ran in the tests.** Every test replaced the account agent with a fake, so moving from the deprecated `create_react_agent` to `create_agent` had no test of the real loop. | Two tests run the real `create_agent` with a scripted tool-calling model, and any deprecated LangGraph API now fails the tests. |
+| **Schema changes had no path.** Tables were created by the seed script, so changing a model meant rebuilding the databases. | Alembic migrations per database, with a test that fails when a model changes without a migration. |
+
+## 7. Lessons
 
 - **Move decisions with consequences out of the prompt.** Routing, escalation policy, id validation and memory
   hygiene all ended up in code. Prompts set the agent's behavior; code enforces the rules that must always hold.
@@ -147,31 +199,36 @@ reveal what the real model will do.
   word for word. Templates such as "Reported <problem>" worked better than concrete examples.
 - **Schema descriptions matter more than the prompt for structured output.**
 - **Test against the real model, repeatedly.** The scripted tests verify the logic, but every problem in
-  section 5 only showed up in real runs. Several showed up only in some runs.
+  section 6 only showed up in real runs. Several showed up only in some runs.
 - **Keep demo data reproducible.** All demo runs used copies of the committed databases, so the documented data
   stays accurate.
 
-## 7. Limitations and next steps
+## 8. Limitations and next steps
 
 - **Wording varies between runs.** Routes and policy decisions are fixed by code, but reply wording and some
   judgments (such as how many recommendations to give) vary.
-- **Short-term memory is in process.** `MemorySaver` is lost on restart. The conversation is rebuilt from the
-  database, but a persistent checkpointer such as SQLite or Postgres would keep the full run state.
+- **Short-term memory is in process in the notebooks.** `MemorySaver` is lost on restart, and the conversation is
+  rebuilt from the database. The agent service keeps the full run state in Postgres (`PostgresSaver`).
 - **Search is literal.** Experience search matches words, not meanings. Embedding the catalog would let a query
   like "outdoor activities" work directly.
 - **Memory filters are pattern-based.** They block every slip seen in testing, but a new kind could still get
   through. An evaluation set of conversations and expected memories would measure it.
-- **The evaluation suite hasn't been run against the real model yet.** `solution/evals` has 36 labelled
-  tickets that measure classification, routing, outcomes, escalation teams, tool calls, and (with an LLM
-  judge) answer faithfulness and expected points, over repeated runs. It doesn't yet check what is written to
-  long-term memory.
+- **The evaluation suite hasn't been run against the real model yet.** The course API key was suspended before
+  it could be. It also doesn't yet check what is written to long-term memory.
+- **Bedrock, SageMaker and the full stack with a real model haven't been run.** Bedrock and the SageMaker
+  embeddings are covered by the offline tests only, and the Docker stack has only run with a placeholder key.
+- **The gateway's rate limit is per replica.** It is kept in memory; with several gateway replicas it would
+  need Redis or Valkey.
 - **Single platform.** Knowledge search already works per account, but the account tools are CultPass-specific.
 
-## 8. Repository
+## 9. Repository
 
 | Path | Contents |
 |---|---|
 | [`solution/`](solution/README.md) | The project: notebooks, `agentic/` (agents, tools, design), data and tests |
+| [`solution/evals/README.md`](solution/evals/README.md) | The evaluation suite: running it, what is checked, and the case format |
+| [`service/README.md`](service/README.md) | The microservices: architecture, running with Docker Compose, monitoring, schema migrations, the API |
+| [`.github/workflows/tests.yml`](.github/workflows/tests.yml) | CI: both test suites, with a Postgres service, on every pull request |
 | [`solution/agentic/design/README.md`](solution/agentic/design/README.md) | Architecture, routing rules, memory, logging, safeguards, inputs and outputs |
 | [`solution/03_agentic_app.ipynb`](solution/03_agentic_app.ipynb) | The executed demonstration |
 | [`README.md`](README.md) | Setup, tests and the full demo results |

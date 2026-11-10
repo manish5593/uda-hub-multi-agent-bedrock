@@ -28,6 +28,17 @@ A ticket in natural language, plus optional metadata (customer, channel, urgency
 Business rules and policies are enforced in code, not left to prompts: the LLM proposes, and code decides. See
 [Safeguards](solution/agentic/design/README.md#safeguards-the-llm-proposes-code-decides).
 
+The same agents run in two ways:
+
+- **In process**, from the notebooks or `process_ticket()`, against the committed SQLite databases (`solution/`).
+- **As microservices** behind an API gateway, each service with its own Postgres database, run with Docker
+  Compose. This version adds Alembic migrations, and Prometheus metrics with a Grafana dashboard
+  ([`service/`](service/README.md)).
+
+An evaluation suite ([`solution/evals/`](solution/evals/README.md)) runs 36 labelled tickets against the real model
+and reports routing, outcome, tool and answer accuracy. GitHub Actions runs the offline tests on every pull
+request.
+
 ![UDA-Hub architecture](solution/agentic/design/architecture.svg)
 
 ## Repository layout
@@ -37,6 +48,7 @@ Business rules and policies are enforced in code, not left to prompts: the LLM p
 | `solution/` | The complete, working project, with its own guide in [`solution/README.md`](solution/README.md) |
 | `service/` | The same system as microservices (gateway, agent, CultPass, tickets, knowledge) with Postgres and Docker Compose, in [`service/README.md`](service/README.md) |
 | `requirements.txt` | Python dependencies |
+| `.github/workflows/tests.yml` | CI: runs the solution and service tests (with a Postgres 16 service) on pushes to `main` and on pull requests |
 
 ```
 solution/
@@ -76,7 +88,11 @@ solution/
 
 ### Dependencies
 
-Python 3.11+ (tested with 3.11) and an OpenAI API key. Python packages are listed in `requirements.txt`: LangGraph, LangChain, langchain-openai, NumPy (needed for embedding search), SQLAlchemy, python-dotenv and pytest.
+Python 3.11+ (tested with 3.11) and access to a model: an OpenAI API key, or Amazon Bedrock (AWS credentials,
+with the Claude and Titan embedding models enabled). Python packages are listed in `requirements.txt`: LangGraph,
+LangChain, langchain-openai, langchain-aws and boto3, NumPy (needed for embedding search), SQLAlchemy,
+python-dotenv and pytest. The microservices also need Docker with Compose v2; their packages are pinned in
+`service/requirements.txt`.
 
 ### Installation
 
@@ -137,6 +153,16 @@ python -m pytest tests
 
 The tests need no API key. Each one runs against a temporary copy of the databases, so your data is not modified.
 
+The microservices have their own tests, run from the repository root with both requirements files installed.
+Their migration tests also run against Postgres when `UDAHUB_TEST_POSTGRES_URL` is set (see
+[`service/README.md`](service/README.md#tests)):
+
+```bash
+python -m pytest service/tests
+```
+
+GitHub Actions runs both suites, with a Postgres 16 service, on every pull request and every push to `main`.
+
 To measure the real model, run the evaluation suite (needs the model settings in `.env`): 36 labelled tickets,
 3 runs each, scored in code and by an LLM judge. See [`solution/evals/README.md`](solution/evals/README.md).
 
@@ -166,6 +192,12 @@ python -m evals.run
   - an LLM outage or unknown account that returns a fallback reply and flags the ticket instead of crashing
   - an empty message that is answered without calling the LLM
   - a repeat issue, from a previous ticket and from earlier on the same ticket, that goes straight to a human
+  - the real `create_agent` loop with a scripted tool-calling model: a real tool call, and the step limit
+- `tests/test_evals.py` checks the evaluation suite itself: the case file, every check, judge errors, fresh
+  databases per run, errored runs, the model check, the report and `--fail-under`
+- `service/tests/` covers the microservices in one process: the service APIs, internal-token and API-key checks,
+  rate limiting, the full gateway → agent → services flow, the agent metrics, a service outage mid-turn, and the
+  Alembic migrations (that they match the models, downgrade cleanly, and adopt databases created before them)
 
 ## Demo Results
 
@@ -214,11 +246,19 @@ The model's wording varies from run to run, but the routes and outcomes above we
 | Structured, searchable logs | [`event_log.py`](solution/agentic/event_log.py) writes every decision to `logs/events.jsonl`. Notebook 03 searches it, and the [Logging](solution/agentic/design/README.md#logging) section lists the fields. |
 | Error handling and edge cases | `process_ticket()` in [`workflow.py`](solution/agentic/workflow.py). Notebook 03's "Edge cases" cell covers an empty message, gibberish, an unknown customer, an unknown account and an LLM outage. |
 | Safeguards enforced in code | [Safeguards](solution/agentic/design/README.md#safeguards-the-llm-proposes-code-decides) |
+| Evaluation over repeated runs | [`solution/evals/`](solution/evals/README.md): 36 labelled tickets, scored in code and by an LLM judge |
+| Deployment as microservices | [`service/`](service/README.md): an API gateway and four services, Postgres, Alembic migrations, Docker Compose, Prometheus and Grafana |
 
 ## Built With
 
 * [LangGraph](https://langchain-ai.github.io/langgraph/) - Agent orchestration, state and checkpointing
 * [LangChain](https://python.langchain.com/) - Tools, vector store and model integrations
 * [OpenAI](https://platform.openai.com/) - `gpt-4o-mini` chat model and `text-embedding-3-small` embeddings
+* [Amazon Bedrock](https://aws.amazon.com/bedrock/) and [Amazon SageMaker](https://aws.amazon.com/sagemaker/) - Claude and Titan embeddings, or an embedding endpoint
 * [SQLAlchemy](https://www.sqlalchemy.org/) - Core (`udahub.db`) and external (`cultpass.db`) databases
 * [NumPy](https://numpy.org/) - Cosine similarity for embedding search
+* [FastAPI](https://fastapi.tiangolo.com/) - The gateway and the four services
+* [PostgreSQL](https://www.postgresql.org/) and [Alembic](https://alembic.sqlalchemy.org/) - Service databases, LangGraph checkpoints and schema migrations
+* [Docker Compose](https://docs.docker.com/compose/) - Running the services together
+* [Prometheus](https://prometheus.io/) and [Grafana](https://grafana.com/) - Metrics and the UDA-Hub dashboard
+* [GitHub Actions](https://docs.github.com/actions) - Continuous integration

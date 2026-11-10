@@ -18,7 +18,7 @@ flowchart TD
     LC --> CL[classifier]
     CL --> SU{supervisor}
     SU -.->|how-to / policy| KA[knowledge_agent<br/>RAG]
-    SU -.->|account data / action| AA[account_agent<br/>tools]
+    SU -.->|account data / action| AA[account_agent<br/>create_agent + tools]
     SU -.->|human / critical / blocked / repeat| EA[escalation_agent]
     SU -.->|guest, needs account| RI[request_info]
     KA --> QG{quality_gate}
@@ -48,10 +48,10 @@ Purple nodes use the LLM, gray nodes are plain code, red is the escalation to a 
 | **Classifier** | Gives the ticket a structured classification: issue type, urgency, sentiment, language, whether account action is needed, and confidence |
 | **Supervisor** | Identifies the customer (from metadata or an email in the conversation) and routes the ticket with deterministic rules. It escalates before any resolver runs when the customer asks for a human, the issue is legal or critical, the classifier isn't confident, a blocked customer has an account issue, or the customer reports a problem they reported before |
 | **Knowledge agent** | Answers how-to and policy questions with RAG over the 18 knowledge base articles |
-| **Account agent** | A ReAct agent with CultPass tools bound to the current customer: account, reservations, booking, cancellation, subscription changes and refund requests. Booking and cancellation only accept ids that a lookup returned in the same turn |
+| **Account agent** | A ReAct agent (LangChain `create_agent`) with CultPass tools bound to the current customer: account, reservations, booking, cancellation, subscription changes and refund requests. Booking and cancellation only accept ids that a lookup returned in the same turn |
 | **Quality gate** | Scores the draft reply for confidence and checks that it is backed by the articles or tool results. It escalates on low confidence (< 0.7), an unsupported draft, or a policy that needs a human (such as a refund) |
 | **Escalation agent** | Picks the human team and priority, saves a handoff note on the ticket, and replies to the customer |
-| **Memory** | Short-term: the conversation per ticket thread (`MemorySaver`). Long-term: customer preferences and reported issues (`customer_memory` table) and previous tickets in `udahub.db`. The memory writer only sees the customer's own messages. Reservation state, named experiences, one-off requests, contact details and duplicates are filtered out |
+| **Memory** | Short-term: the conversation per ticket thread (`MemorySaver` here, `PostgresSaver` in the [agent service](../service/README.md)). Long-term: customer preferences and reported issues (`customer_memory` table) and previous tickets in `udahub.db`. The memory writer only sees the customer's own messages. Reservation state, named experiences, one-off requests, contact details and duplicates are filtered out |
 
 ## Running it
 
@@ -157,6 +157,9 @@ See [`evals/README.md`](evals/README.md) for the checks, the case format, and th
 | [`agentic/tools/`](agentic/tools/README.md) | CultPass account tools, RAG retriever, ticket and memory storage. The README covers the rules each tool enforces and how to add a tool. |
 | [`agentic/design/`](agentic/design/README.md) | Architecture diagram, Mermaid graph, and the design document: routing rules, resolve-or-escalate logic, memory, and safeguards |
 | `agentic/config.py` | Models, database paths and decision thresholds |
+| `agentic/llm.py` | Chat and embedding models for OpenAI, Amazon Bedrock or a SageMaker endpoint |
+| `agentic/remote/` | HTTP clients the tools use when running as microservices ([`service/`](../service/README.md)) |
+| `agentic/demo_data.py` | Throwaway copies of the demo databases with the dates moved to today, for the tests and evaluations |
 | `agentic/state.py` | Graph state and structured-output schemas |
 | [`data/core/`](data/core/README.md) | `udahub.db`: tables, committed contents, how the agents write to it, and adding articles |
 | [`data/external/`](data/external/README.md) | `cultpass.db`, the JSONL seed data, the demo customers, resetting, and adding data |
@@ -164,7 +167,7 @@ See [`evals/README.md`](evals/README.md) for the checks, the case format, and th
 | `tests/` | Unit tests and end-to-end graph tests |
 | [`evals/`](evals/README.md) | Evaluation suite: labelled cases (`cases.json`), the runner, scoring and LLM judge |
 | `utils.py` | Course-provided helpers, including `chat_interface` |
-| `.env.example` | Template for `.env`, which holds your `OPENAI_API_KEY` |
+| `.env.example` | Template for `.env`, which holds the model settings: an `OPENAI_API_KEY`, or Bedrock and AWS settings |
 
 The project overview for the whole repository is in the [root README](../README.md).
 
@@ -185,3 +188,4 @@ The project overview for the whole repository is in the [root README](../README.
 | Error handling and edge cases | `process_ticket()` in `agentic/workflow.py`, and notebook 03's "Edge cases" cell |
 | Safeguards enforced in code | [`agentic/design/README.md`](agentic/design/README.md#safeguards-the-llm-proposes-code-decides) |
 | Demo run with outputs | `03_agentic_app.ipynb`, summarised under [Demo results](#demo-results-notebook-03) |
+| Measuring accuracy over repeated runs | [`evals/`](evals/README.md): 36 labelled tickets scored in code and by an LLM judge |
