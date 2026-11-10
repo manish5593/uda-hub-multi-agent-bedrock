@@ -153,7 +153,7 @@ See [`evals/README.md`](evals/README.md) for the checks, the case format, and th
 | Path | Contents |
 |---|---|
 | `agentic/workflow.py` | The LangGraph graph (`orchestrator`) and `process_ticket()` |
-| [`agentic/agents/`](agentic/agents/README.md) | Classifier, supervisor, knowledge and account resolvers, quality gate, escalation, memory. The README covers the memory rules and how to add an agent. |
+| [`agentic/agents/`](agentic/agents/README.md) | `classifier`, `supervisor`, `knowledge_agent`, `account_agent`, `quality_gate`, `escalation_agent`, `write_memory`. The README covers the memory rules and how to add an agent. |
 | [`agentic/tools/`](agentic/tools/README.md) | CultPass account tools, RAG retriever, ticket and memory storage. The README covers the rules each tool enforces and how to add a tool. |
 | [`agentic/design/`](agentic/design/README.md) | Architecture diagram, Mermaid graph, and the design document: routing rules, resolve-or-escalate logic, memory, and safeguards |
 | `agentic/config.py` | Models, database paths and decision thresholds |

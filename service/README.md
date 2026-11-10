@@ -27,10 +27,10 @@ graph LR
     C([Channel integration<br/>web chat, email bridge]) -->|X-API-Key| GW
     subgraph SVC [services on the internal network]
         GW[gateway<br/>API keys, rate limit]
-        AG[agent<br/>LangGraph workflow]
-        CP[cultpass<br/>CultPass system]
-        TS[tickets<br/>tickets + memory]
-        KS[knowledge<br/>KB + embeddings]
+        AG[agent service · LangGraph workflow<br/>classifier, supervisor,<br/>knowledge_agent, account_agent,<br/>escalation_agent, quality_gate,<br/>load_context, request_info, write_memory]
+        CP[cultpass service<br/>CultPass system]
+        TS[tickets service<br/>tickets + memory]
+        KS[knowledge service<br/>KB + embeddings]
     end
     GW -->|POST message| AG
     GW -->|GET ticket, messages| TS
@@ -75,7 +75,7 @@ graph LR
 | Service | Owns | Does | Talks to |
 |---|---|---|---|
 | `gateway` | nothing | The only public endpoint (port 8080). Checks API keys, rate-limits each key, adds request ids, and returns only the reply and ticket status, never the agent's trace or internal notes | agent, tickets |
-| `agent` | `agent_state` DB (LangGraph checkpoints) | Runs the workflow for one customer message: classifier, supervisor, resolvers, quality gate, escalation, memory | cultpass, tickets, knowledge, the chat model |
+| `agent` | `agent_state` DB (LangGraph checkpoints) | Runs the LangGraph workflow for one customer message, with the agents from `solution/agentic/agents` (see [The agents in the agent service](#the-agents-in-the-agent-service)) | cultpass, tickets, knowledge, the chat model |
 | `cultpass` | `cultpass` DB | The CultPass system of record: customers, subscriptions, experiences, reservations, and their rules (quota, premium tier, blocked accounts, free slots) | nothing |
 | `tickets` | `tickets` DB | Tickets, messages, UDA-Hub users and long-term customer memory | nothing |
 | `knowledge` | `knowledge` DB | Knowledge-base articles and their embedding index; RAG search with the keyword fallback | the embedding model |
@@ -95,6 +95,24 @@ They share one Postgres server to keep the demo cheap; moving a database to its 
 
 Only the agent and knowledge services get model credentials (`llm.env`), and only the agent can write to
 CultPass. Internal services accept a request only with the shared `INTERNAL_API_TOKEN`.
+
+### The agents in the agent service
+
+The agent service runs the same graph as the notebooks (`solution/agentic/workflow.py`), with the same node
+names. Only the data calls change: they go to the service that owns the data.
+
+| Node | Module | Uses the LLM | Calls |
+|---|---|---|---|
+| `load_context` | `memory_agent.py` | No | tickets service (ticket, messages, memories), cultpass service (customer profile) |
+| `classifier` | `classifier.py` | Yes | nothing |
+| `supervisor` | `supervisor.py` | No | cultpass service (find a guest by email), tickets service (link the ticket) |
+| `request_info` | `supervisor.py` | Only to translate | nothing |
+| `knowledge_agent` | `knowledge_agent.py` | Yes | knowledge service (RAG search) |
+| `account_agent` | `account_agent.py` | Yes (`create_agent` with tools) | cultpass service (account, bookings, subscription), tickets service (refund request note), knowledge service (search) |
+| `quality_gate`, `approve` | `quality_gate.py` | `quality_gate` only | nothing |
+| `escalation_agent` | `escalation_agent.py` | Yes | tickets service (handoff note) |
+| `finalize` | `memory_agent.py` | No | tickets service (reply, ticket status) |
+| `write_memory` | `memory_agent.py` | Yes | tickets service (customer memory) |
 
 ## How the split works
 

@@ -1,7 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 690" width="1200" height="690" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 712" width="1200" height="712" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">
 <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#4a5568"/></marker></defs>
 <style>.t{font-size:15px;font-weight:600;fill:#1a202c;text-anchor:middle}.s{font-size:12px;fill:#4a5568;text-anchor:middle}.l{font-size:11.5px;fill:#4a5568;font-style:italic}.h{font-size:24px;font-weight:700;fill:#1a202c}.sh{font-size:13px;fill:#4a5568}.ph{font-size:13px;font-weight:700;fill:#1a202c}</style>
-<rect width="1200" height="690" fill="#ffffff"/>
+<rect width="1200" height="712" fill="#ffffff"/>
 <text x="40" y="44" class="h">UDA-Hub: deployment as microservices (service/)</text>
 <text x="40" y="66" class="sh">docker compose up · the same agents, tools and rules as the notebooks, split along data ownership</text>
 <rect x="760" y="20" width="16" height="12" rx="3" fill="#e8f6ee" stroke="#2e8b57"/>
@@ -16,91 +16,107 @@
 <text x="984" y="49" class="sh">Monitoring</text>
 <rect x="960" y="56" width="16" height="12" rx="3" fill="#fdecea" stroke="#c0392b"/>
 <text x="984" y="67" class="sh">External model API</text>
-<rect x="300" y="100" width="700" height="525" rx="12" fill="none" stroke="#5b6779" stroke-width="1.2" stroke-dasharray="4 4"/>
+<rect x="300" y="100" width="700" height="545" rx="12" fill="none" stroke="#5b6779" stroke-width="1.2" stroke-dasharray="4 4"/>
 <text x="314" y="93" class="ph">Internal Docker network · only the gateway is published (port 8080)</text>
-<rect x="25" y="248" width="245" height="270" rx="12" fill="none" stroke="#2b6cb0" stroke-width="1.2" stroke-dasharray="4 4"/>
-<text x="39" y="268" class="ph">--profile monitoring</text>
-<rect x="1015" y="100" width="170" height="270" rx="12" fill="none" stroke="#c0392b" stroke-width="1.2" stroke-dasharray="4 4"/>
+<rect x="25" y="278" width="245" height="270" rx="12" fill="none" stroke="#2b6cb0" stroke-width="1.2" stroke-dasharray="4 4"/>
+<text x="39" y="298" class="ph">--profile monitoring</text>
+<rect x="1015" y="100" width="170" height="295" rx="12" fill="none" stroke="#c0392b" stroke-width="1.2" stroke-dasharray="4 4"/>
 <text x="1029" y="93" class="ph">Model providers</text>
-<rect x="312" y="405" width="676" height="100" rx="12" fill="none" stroke="#b7791f" stroke-width="1.2" stroke-dasharray="4 4"/>
-<text x="326" y="496" class="ph">Postgres 16 · one database and login role per service</text>
+<rect x="310" y="425" width="685" height="100" rx="12" fill="none" stroke="#b7791f" stroke-width="1.2" stroke-dasharray="4 4"/>
+<text x="324" y="516" class="ph">Postgres 16 · one database and login role per service</text>
 <rect x="40" y="120" width="200" height="76" rx="10" fill="#e8f6ee" stroke="#2e8b57" stroke-width="1.6"/>
 <text x="140.0" y="155.0" class="t">Channel integration</text>
 <text x="140.0" y="173.0" class="s">web chat, email bridge</text>
-<rect x="320" y="120" width="240" height="76" rx="10" fill="#eef1f5" stroke="#5b6779" stroke-width="1.6"/>
-<text x="440.0" y="147.0" class="t">API gateway</text>
-<text x="440.0" y="165.0" class="s">API keys · rate limit per key</text>
-<text x="440.0" y="181.0" class="s">request ids · reply + status only</text>
-<rect x="760" y="120" width="220" height="76" rx="10" fill="#efeafe" stroke="#6d4fd8" stroke-width="1.6"/>
-<text x="870.0" y="147.0" class="t">agent service</text>
-<text x="870.0" y="165.0" class="s">LangGraph workflow</text>
-<text x="870.0" y="181.0" class="s">ticket lock</text>
-<rect x="1028" y="130" width="144" height="66" rx="10" fill="#fdecea" stroke="#c0392b" stroke-width="1.6"/>
-<text x="1100.0" y="160.0" class="t">Chat model</text>
-<text x="1100.0" y="178.0" class="s">OpenAI or Bedrock</text>
-<rect x="1028" y="280" width="144" height="76" rx="10" fill="#fdecea" stroke="#c0392b" stroke-width="1.6"/>
-<text x="1100.0" y="307.0" class="t">Embeddings</text>
-<text x="1100.0" y="325.0" class="s">OpenAI, Bedrock</text>
-<text x="1100.0" y="341.0" class="s">or SageMaker</text>
+<rect x="320" y="120" width="220" height="76" rx="10" fill="#eef1f5" stroke="#5b6779" stroke-width="1.6"/>
+<text x="430.0" y="147.0" class="t">gateway</text>
+<text x="430.0" y="165.0" class="s">API keys · rate limit per key</text>
+<text x="430.0" y="181.0" class="s">request ids · reply + status only</text>
+<rect x="590" y="108" width="400" height="152" rx="10" fill="#efeafe" stroke="#6d4fd8" stroke-width="1.6"/>
+<text x="790" y="129" class="t">agent service · LangGraph workflow</text>
+<rect x="602" y="140" width="120" height="30" rx="6" fill="#ffffff" stroke="#6d4fd8" stroke-width="1.2"/>
+<text x="662" y="159.5" class="s" style="fill:#1a202c;font-weight:600">classifier</text>
+<rect x="730" y="140" width="120" height="30" rx="6" fill="#ffffff" stroke="#6d4fd8" stroke-width="1.2"/>
+<text x="790" y="159.5" class="s" style="fill:#1a202c;font-weight:600">supervisor</text>
+<rect x="858" y="140" width="120" height="30" rx="6" fill="#ffffff" stroke="#6d4fd8" stroke-width="1.2"/>
+<text x="918" y="159.5" class="s" style="fill:#1a202c;font-weight:600">quality_gate</text>
+<rect x="602" y="178" width="120" height="30" rx="6" fill="#ffffff" stroke="#6d4fd8" stroke-width="1.2"/>
+<text x="662" y="197.5" class="s" style="fill:#1a202c;font-weight:600">knowledge_agent</text>
+<rect x="730" y="178" width="120" height="30" rx="6" fill="#ffffff" stroke="#6d4fd8" stroke-width="1.2"/>
+<text x="790" y="197.5" class="s" style="fill:#1a202c;font-weight:600">account_agent</text>
+<rect x="858" y="178" width="120" height="30" rx="6" fill="#ffffff" stroke="#6d4fd8" stroke-width="1.2"/>
+<text x="918" y="197.5" class="s" style="fill:#1a202c;font-weight:600">escalation_agent</text>
+<rect x="602" y="216" width="120" height="30" rx="6" fill="#ffffff" stroke="#6d4fd8" stroke-width="1.2"/>
+<text x="662" y="235.5" class="s" style="fill:#1a202c;font-weight:600">load_context</text>
+<rect x="730" y="216" width="120" height="30" rx="6" fill="#ffffff" stroke="#6d4fd8" stroke-width="1.2"/>
+<text x="790" y="235.5" class="s" style="fill:#1a202c;font-weight:600">request_info</text>
+<rect x="858" y="216" width="120" height="30" rx="6" fill="#ffffff" stroke="#6d4fd8" stroke-width="1.2"/>
+<text x="918" y="235.5" class="s" style="fill:#1a202c;font-weight:600">write_memory</text>
+<rect x="1028" y="125" width="144" height="66" rx="10" fill="#fdecea" stroke="#c0392b" stroke-width="1.6"/>
+<text x="1100.0" y="155.0" class="t">Chat model</text>
+<text x="1100.0" y="173.0" class="s">OpenAI or Bedrock</text>
+<rect x="1028" y="300" width="144" height="76" rx="10" fill="#fdecea" stroke="#c0392b" stroke-width="1.6"/>
+<text x="1100.0" y="327.0" class="t">Embeddings</text>
+<text x="1100.0" y="345.0" class="s">OpenAI, Bedrock</text>
+<text x="1100.0" y="361.0" class="s">or SageMaker</text>
 <path d="M240 158 H316" fill="none" stroke="#4a5568" stroke-width="1.6" marker-end="url(#arrow)"/>
 <text x="278" y="150" class="l" text-anchor="middle">X-API-Key</text>
-<path d="M560 158 H756" fill="none" stroke="#4a5568" stroke-width="1.6" marker-end="url(#arrow)"/>
-<text x="658" y="150" class="l" text-anchor="middle">POST /v1/tickets/{id}/messages</text>
-<path d="M980 158 H1024" fill="none" stroke="#4a5568" stroke-width="1.6" stroke-dasharray="6 4" marker-end="url(#arrow)"/>
-<rect x="320" y="270" width="150" height="76" rx="10" fill="#eef1f5" stroke="#5b6779" stroke-width="1.6"/>
-<text x="395.0" y="297.0" class="t">tickets</text>
-<text x="395.0" y="315.0" class="s">tickets, messages,</text>
-<text x="395.0" y="331.0" class="s">customer memory</text>
-<rect x="490" y="270" width="150" height="76" rx="10" fill="#eef1f5" stroke="#5b6779" stroke-width="1.6"/>
-<text x="565.0" y="297.0" class="t">cultpass</text>
-<text x="565.0" y="315.0" class="s">accounts, bookings,</text>
-<text x="565.0" y="331.0" class="s">business rules</text>
-<rect x="660" y="270" width="150" height="76" rx="10" fill="#eef1f5" stroke="#5b6779" stroke-width="1.6"/>
-<text x="735.0" y="297.0" class="t">knowledge</text>
-<text x="735.0" y="315.0" class="s">articles, embedding</text>
-<text x="735.0" y="331.0" class="s">index, RAG search</text>
-<path d="M380 196 V266" fill="none" stroke="#4a5568" stroke-width="1.6" marker-end="url(#arrow)"/>
-<text x="372" y="240" class="l" text-anchor="end">GET ticket, messages</text>
-<path d="M870 196 V228 H420" fill="none" stroke="#4a5568" stroke-width="1.6"/>
-<path d="M420 228 V266" fill="none" stroke="#4a5568" stroke-width="1.6" marker-end="url(#arrow)"/>
-<path d="M565 228 V266" fill="none" stroke="#4a5568" stroke-width="1.6" marker-end="url(#arrow)"/>
-<path d="M735 228 V266" fill="none" stroke="#4a5568" stroke-width="1.6" marker-end="url(#arrow)"/>
-<text x="600" y="222" class="l" text-anchor="start">HTTP + internal token, request id forwarded</text>
-<path d="M810 318 H1024" fill="none" stroke="#4a5568" stroke-width="1.6" stroke-dasharray="6 4" marker-end="url(#arrow)"/>
-<rect x="320" y="418" width="150" height="58" rx="10" fill="#fff6e0" stroke="#b7791f" stroke-width="1.6"/>
-<text x="395.0" y="444.0" class="t">tickets</text>
-<text x="395.0" y="462.0" class="s">tickets, memory</text>
-<rect x="490" y="418" width="150" height="58" rx="10" fill="#fff6e0" stroke="#b7791f" stroke-width="1.6"/>
-<text x="565.0" y="444.0" class="t">cultpass</text>
-<text x="565.0" y="462.0" class="s">users, bookings</text>
-<rect x="660" y="418" width="150" height="58" rx="10" fill="#fff6e0" stroke="#b7791f" stroke-width="1.6"/>
-<text x="735.0" y="444.0" class="t">knowledge</text>
-<text x="735.0" y="462.0" class="s">accounts, articles</text>
-<rect x="830" y="418" width="150" height="58" rx="10" fill="#fff6e0" stroke="#b7791f" stroke-width="1.6"/>
-<text x="905.0" y="444.0" class="t">agent_state</text>
-<text x="905.0" y="462.0" class="s">PostgresSaver checkpoints</text>
-<path d="M395 346 V414" fill="none" stroke="#4a5568" stroke-width="1.6" marker-end="url(#arrow)"/>
-<path d="M565 346 V414" fill="none" stroke="#4a5568" stroke-width="1.6" marker-end="url(#arrow)"/>
-<path d="M735 346 V414" fill="none" stroke="#4a5568" stroke-width="1.6" marker-end="url(#arrow)"/>
-<path d="M955 196 V414" fill="none" stroke="#ffffff" stroke-width="7"/>
-<path d="M955 196 V414" fill="none" stroke="#4a5568" stroke-width="1.6" marker-end="url(#arrow)"/>
-<text x="948" y="380" class="l" text-anchor="end">conversations</text>
-<rect x="320" y="535" width="320" height="66" rx="10" fill="#fff6e0" stroke="#b7791f" stroke-width="1.6"/>
-<text x="480.0" y="565.0" class="t">migrate, then seed (one-shot jobs)</text>
-<text x="480.0" y="583.0" class="s">Alembic migrations · demo data into empty tables</text>
-<path d="M480 535 V509" fill="none" stroke="#4a5568" stroke-width="1.6" marker-end="url(#arrow)"/>
-<rect x="40" y="285" width="210" height="76" rx="10" fill="#e6f0fb" stroke="#2b6cb0" stroke-width="1.6"/>
-<text x="145.0" y="312.0" class="t">Prometheus</text>
-<text x="145.0" y="330.0" class="s">scrapes /metrics every 15 s</text>
-<text x="145.0" y="346.0" class="s">localhost:9090</text>
-<rect x="40" y="425" width="210" height="76" rx="10" fill="#e6f0fb" stroke="#2b6cb0" stroke-width="1.6"/>
-<text x="145.0" y="452.0" class="t">Grafana</text>
-<text x="145.0" y="470.0" class="s">UDA-Hub overview dashboard</text>
-<text x="145.0" y="486.0" class="s">localhost:3000</text>
-<path d="M250 323 H316" fill="none" stroke="#4a5568" stroke-width="1.6" stroke-dasharray="6 4" marker-end="url(#arrow)"/>
-<text x="283" y="315" class="l" text-anchor="middle">/metrics</text>
-<path d="M145 425 V365" fill="none" stroke="#4a5568" stroke-width="1.6" marker-end="url(#arrow)"/>
-<text x="153" y="398" class="l" text-anchor="start">queries</text>
-<text x="40" y="650" class="sh">Prometheus scrapes all five services (request counts and latency, plus the agent's outcomes, routes, escalations and tool calls). Every service has /health;</text>
-<text x="40" y="668" class="sh">the gateway's /ready checks the agent and tickets services. GitHub Actions runs the offline tests, including the migrations on Postgres 16, on every pull request.</text>
+<path d="M540 158 H586" fill="none" stroke="#4a5568" stroke-width="1.6" marker-end="url(#arrow)"/>
+<text x="563" y="150" class="l" text-anchor="middle">POST</text>
+<path d="M990 158 H1024" fill="none" stroke="#4a5568" stroke-width="1.6" stroke-dasharray="6 4" marker-end="url(#arrow)"/>
+<rect x="318" y="300" width="155" height="76" rx="10" fill="#eef1f5" stroke="#5b6779" stroke-width="1.6"/>
+<text x="395.5" y="327.0" class="t">tickets service</text>
+<text x="395.5" y="345.0" class="s">tickets, messages,</text>
+<text x="395.5" y="361.0" class="s">customer memory</text>
+<rect x="488" y="300" width="155" height="76" rx="10" fill="#eef1f5" stroke="#5b6779" stroke-width="1.6"/>
+<text x="565.5" y="327.0" class="t">cultpass service</text>
+<text x="565.5" y="345.0" class="s">accounts, bookings,</text>
+<text x="565.5" y="361.0" class="s">business rules</text>
+<rect x="658" y="300" width="155" height="76" rx="10" fill="#eef1f5" stroke="#5b6779" stroke-width="1.6"/>
+<text x="735.5" y="327.0" class="t">knowledge service</text>
+<text x="735.5" y="345.0" class="s">articles, embedding</text>
+<text x="735.5" y="361.0" class="s">index, RAG search</text>
+<path d="M345 196 V296" fill="none" stroke="#4a5568" stroke-width="1.6" marker-end="url(#arrow)"/>
+<text x="353" y="240" class="l" text-anchor="start">GET ticket, messages</text>
+<path d="M760 260 V280 H420" fill="none" stroke="#4a5568" stroke-width="1.6"/>
+<path d="M420 280 V296" fill="none" stroke="#4a5568" stroke-width="1.6" marker-end="url(#arrow)"/>
+<path d="M565 280 V296" fill="none" stroke="#4a5568" stroke-width="1.6" marker-end="url(#arrow)"/>
+<path d="M735 280 V296" fill="none" stroke="#4a5568" stroke-width="1.6" marker-end="url(#arrow)"/>
+<text x="440" y="274" class="l" text-anchor="start">HTTP + internal token, request id forwarded</text>
+<path d="M813 338 H1024" fill="none" stroke="#4a5568" stroke-width="1.6" stroke-dasharray="6 4" marker-end="url(#arrow)"/>
+<rect x="318" y="438" width="155" height="58" rx="10" fill="#fff6e0" stroke="#b7791f" stroke-width="1.6"/>
+<text x="395.5" y="464.0" class="t">tickets</text>
+<text x="395.5" y="482.0" class="s">tickets, memory</text>
+<rect x="488" y="438" width="155" height="58" rx="10" fill="#fff6e0" stroke="#b7791f" stroke-width="1.6"/>
+<text x="565.5" y="464.0" class="t">cultpass</text>
+<text x="565.5" y="482.0" class="s">users, bookings</text>
+<rect x="658" y="438" width="155" height="58" rx="10" fill="#fff6e0" stroke="#b7791f" stroke-width="1.6"/>
+<text x="735.5" y="464.0" class="t">knowledge</text>
+<text x="735.5" y="482.0" class="s">accounts, articles</text>
+<rect x="828" y="438" width="155" height="58" rx="10" fill="#fff6e0" stroke="#b7791f" stroke-width="1.6"/>
+<text x="905.5" y="464.0" class="t">agent_state</text>
+<text x="905.5" y="482.0" class="s">PostgresSaver checkpoints</text>
+<path d="M395 376 V434" fill="none" stroke="#4a5568" stroke-width="1.6" marker-end="url(#arrow)"/>
+<path d="M565 376 V434" fill="none" stroke="#4a5568" stroke-width="1.6" marker-end="url(#arrow)"/>
+<path d="M735 376 V434" fill="none" stroke="#4a5568" stroke-width="1.6" marker-end="url(#arrow)"/>
+<path d="M905 260 V434" fill="none" stroke="#ffffff" stroke-width="7"/>
+<path d="M905 260 V434" fill="none" stroke="#4a5568" stroke-width="1.6" marker-end="url(#arrow)"/>
+<text x="898" y="410" class="l" text-anchor="end">conversations</text>
+<rect x="318" y="555" width="320" height="66" rx="10" fill="#fff6e0" stroke="#b7791f" stroke-width="1.6"/>
+<text x="478.0" y="585.0" class="t">migrate, then seed (one-shot jobs)</text>
+<text x="478.0" y="603.0" class="s">Alembic migrations · demo data into empty tables</text>
+<path d="M480 555 V529" fill="none" stroke="#4a5568" stroke-width="1.6" marker-end="url(#arrow)"/>
+<rect x="40" y="315" width="210" height="76" rx="10" fill="#e6f0fb" stroke="#2b6cb0" stroke-width="1.6"/>
+<text x="145.0" y="342.0" class="t">Prometheus</text>
+<text x="145.0" y="360.0" class="s">scrapes /metrics every 15 s</text>
+<text x="145.0" y="376.0" class="s">localhost:9090</text>
+<rect x="40" y="455" width="210" height="76" rx="10" fill="#e6f0fb" stroke="#2b6cb0" stroke-width="1.6"/>
+<text x="145.0" y="482.0" class="t">Grafana</text>
+<text x="145.0" y="500.0" class="s">UDA-Hub overview dashboard</text>
+<text x="145.0" y="516.0" class="s">localhost:3000</text>
+<path d="M250 353 H314" fill="none" stroke="#4a5568" stroke-width="1.6" stroke-dasharray="6 4" marker-end="url(#arrow)"/>
+<text x="283" y="345" class="l" text-anchor="middle">/metrics</text>
+<path d="M145 455 V395" fill="none" stroke="#4a5568" stroke-width="1.6" marker-end="url(#arrow)"/>
+<text x="153" y="428" class="l" text-anchor="start">queries</text>
+<text x="40" y="672" class="sh">Prometheus scrapes all five services (request counts and latency, plus the agent's outcomes, routes, escalations and tool calls). Every service has /health;</text>
+<text x="40" y="690" class="sh">the gateway's /ready checks the agent and tickets services. GitHub Actions runs the offline tests, including the migrations on Postgres 16, on every pull request.</text>
 </svg>
