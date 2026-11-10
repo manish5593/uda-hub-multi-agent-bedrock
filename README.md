@@ -63,7 +63,7 @@ solution/
 |---|---|
 | [`report.md`](report.md) | Project report: architecture, results, the problems found in real-model testing and how each was fixed, lessons, and limitations |
 | [`solution/README.md`](solution/README.md) | Project guide: ticket flow, demo results, and where each requirement is met |
-| [`service/README.md`](service/README.md) | Microservices: architecture, how the split works, running with Docker Compose, the public API, and limitations |
+| [`service/README.md`](service/README.md) | Microservices: architecture, how the split works, running with Docker Compose, monitoring with Grafana, schema migrations, the public API, and limitations |
 | [`agentic/design/`](solution/agentic/design/README.md) | Architecture, routing rules, resolve-or-escalate logic, memory, and safeguards |
 | [`agentic/agents/`](solution/agentic/agents/README.md) | Each agent node, the long-term memory rules, and how to add an agent |
 | [`agentic/tools/`](solution/agentic/tools/README.md) | Each tool and the rules it enforces, retrieval, and how to add a tool |

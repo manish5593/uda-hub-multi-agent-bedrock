@@ -14,6 +14,18 @@ jobs:
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # The migration tests also run against a real Postgres (same major version as docker-compose.yml)
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v7
 
@@ -30,10 +42,12 @@ jobs:
         run: pip install -r requirements.txt -r service/requirements.txt
 
       # Offline: the LLM is scripted and every test uses a temporary copy of the SQLite databases,
-      # so no API keys, Docker or Postgres are needed.
+      # so no API keys are needed.
       - name: Solution tests
         working-directory: solution
         run: python -m pytest tests -q
 
       - name: Service tests
-        run: python -m pytest service/tests -q
+        env:
+          UDAHUB_TEST_POSTGRES_URL: postgresql+psycopg://postgres:postgres@localhost:5432/postgres
+        run: python -m pytest service/tests -q -rs
