@@ -136,6 +136,24 @@ def test_blocked_customer_is_escalated_and_memory_is_written(agent_client, llm):
     assert "Prefers email contact" in [m["content"] for m in ticket_tools.get_memories(ticket["udahub_user_id"])]
 
 
+def test_agent_outcomes_are_exported_as_metrics(agent_client, llm):
+    from prometheus_client import REGISTRY
+
+    def value(name, **labels):
+        return REGISTRY.get_sample_value(name, labels) or 0.0
+
+    turns = dict(route="escalation_agent", status="escalated")
+    team = dict(team="trust_and_safety", priority="high")
+    before = value("udahub_agent_turns_total", **turns), value("udahub_agent_escalations_total", **team)
+    llm.outputs[TicketClassification] = classification(issue_type="login_access")
+    agent_client.post("/tickets/t-metrics/messages",
+                      json={"text": "I can't log in", "metadata": {"external_user_id": "a4ab87"}})
+
+    assert value("udahub_agent_turns_total", **turns) == before[0] + 1
+    assert value("udahub_agent_escalations_total", **team) == before[1] + 1
+    assert 'udahub_agent_turns_total{route="escalation_agent",status="escalated"}' in agent_client.get("/metrics").text
+
+
 def test_a_service_outage_still_gets_the_customer_a_reply(agent_client, llm, cultpass_client, monkeypatch):
     """The CultPass service failing mid-turn must not break the request: the workflow's fallback replies."""
     def broken(*args, **kwargs):

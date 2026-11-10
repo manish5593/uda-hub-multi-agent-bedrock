@@ -14,19 +14,43 @@ import os
 import threading
 from collections import defaultdict
 from contextlib import asynccontextmanager, contextmanager
-from typing import Optional
+from typing import Optional, get_args
 
 from fastapi import Path
+from prometheus_client import Counter
 from pydantic import BaseModel, Field
 
 from agentic import config
+from agentic.agents.escalation_agent import EscalationHandoff
 from agentic.remote.http import is_remote
+from agentic.state import Route
 from agentic.workflow import build_graph, process_ticket
 from service.common.app import create_app
 
 logger = logging.getLogger("agent")
 STATE_DB_URL = os.getenv("AGENT_STATE_DB_URL") or None
 TICKET_ID_PATTERN = r"^[A-Za-z0-9._:-]{1,64}$"
+
+# What the agent did with each message (the HTTP metrics in service.common only see requests and timings).
+# Every label comes from a fixed set (Route, ticket statuses, EscalationHandoff, the tool names).
+TURNS = Counter("udahub_agent_turns_total", "Customer messages handled", ["route", "status"])
+ESCALATIONS = Counter("udahub_agent_escalations_total", "Tickets handed to a human team", ["team", "priority"])
+TOOL_CALLS = Counter("udahub_agent_tool_calls_total", "Tool calls made while handling messages", ["tool"])
+TURN_STATUSES = ("resolved", "awaiting_customer", "escalated", "error")
+
+
+def _start_counters_at_zero() -> None:
+    """Create every known series at 0. Prometheus's increase() can't see a series' first increment if the
+    series doesn't exist yet, so without this the first escalation to each team would never be counted."""
+    for route in (*get_args(Route), "none"):
+        for status in TURN_STATUSES:
+            TURNS.labels(route, status)
+    for team in get_args(EscalationHandoff.model_fields["team"].annotation):
+        for priority in get_args(EscalationHandoff.model_fields["priority"].annotation):
+            ESCALATIONS.labels(team, priority)
+
+
+_start_counters_at_zero()
 
 
 class Runtime:
@@ -135,13 +159,20 @@ def post_message(body: MessageIn, ticket_id: str = Path(pattern=TICKET_ID_PATTER
         # process_ticket never raises: a failure returns a fallback reply and flags the ticket for a human
         state = process_ticket(body.text, ticket_id, body.metadata, agent=runtime.graph)
     escalation = state.get("escalation")
+    status = state.get("ticket_status") or "error"
+    tools_used = [a["tool"] for a in state.get("actions_taken") or []]
+    TURNS.labels(state.get("route") or "none", status).inc()
+    if escalation:
+        ESCALATIONS.labels(escalation["team"], escalation["priority"]).inc()
+    for tool in tools_used:
+        TOOL_CALLS.labels(tool).inc()
     return TurnOut(
         ticket_id=ticket_id,
         reply=state.get("final_response", ""),
-        status=state.get("ticket_status") or "error",
+        status=status,
         route=state.get("route"),
         route_reason=state.get("route_reason"),
         escalation=EscalationOut(**{k: escalation[k] for k in ("team", "priority", "reason")}) if escalation else None,
-        tools_used=[a["tool"] for a in state.get("actions_taken") or []],
+        tools_used=tools_used,
         trace=state.get("trace") or [],
     )

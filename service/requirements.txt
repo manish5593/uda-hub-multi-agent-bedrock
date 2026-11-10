@@ -1,5 +1,7 @@
-# Runtime dependencies of the backend image (CultPass, Ticket, Knowledge and Agent services, and the seed job).
+# Runtime dependencies of the backend image (CultPass, Ticket, Knowledge and Agent services, and the migrate
+# and seed jobs).
 # Pinned to the versions the service tests ran with.
+alembic==1.20.1
 boto3==1.43.127
 fastapi==0.162.2
 httpx==0.28.1

@@ -1,5 +1,6 @@
-"""Create each service's tables and copy in the committed demo data from the SQLite files.
+"""Copy the committed demo data from the SQLite files into each service's database.
 
+    python -m service.scripts.migrate     # first: creates the tables
     python -m service.scripts.seed
 
 Each service has its own database (database-per-service), so the data is split:
@@ -8,49 +9,50 @@ Each service has its own database (database-per-service), so the data is split:
     TICKETS_DB_URL           <- udahub.db: accounts, users, tickets, messages, customer memory
     KNOWLEDGE_DB_URL         <- udahub.db: accounts, knowledge articles
 
-A table that already has rows is left alone, so running it again never overwrites live data.
-Use --reset to empty the tables first and reload the demo data.
+The tables come from the Alembic migrations (service/migrations), not from this script. A table that
+already has rows is left alone, so running it again never overwrites live data. Use --reset to empty the
+tables first and reload the demo data.
 """
 import argparse
 import logging
 import os
 import sys
 
-from sqlalchemy import create_engine, delete, func, insert, select
+from sqlalchemy import create_engine, delete, func, insert, inspect, select
 
 from agentic import config
-from data.models import cultpass, udahub
+from service.migrations.common import DATABASES
 
 logger = logging.getLogger("seed")
 
-TARGETS = {
-    "CULTPASS_DB_URL": (config.CULTPASS_DB_PATH, cultpass.Base.metadata, None),
-    "TICKETS_DB_URL": (config.UDAHUB_DB_PATH, udahub.Base.metadata,
-                       ["accounts", "users", "tickets", "ticket_metadata", "ticket_messages", "customer_memory"]),
-    "KNOWLEDGE_DB_URL": (config.UDAHUB_DB_PATH, udahub.Base.metadata, ["accounts", "knowledge"]),
-}
+SOURCES = {"cultpass": config.CULTPASS_DB_PATH, "tickets": config.UDAHUB_DB_PATH, "knowledge": config.UDAHUB_DB_PATH}
 
 
-def seed(source_path, metadata, table_names, target_url: str, reset: bool = False) -> dict:
-    tables = [t for t in metadata.sorted_tables if table_names is None or t.name in table_names]
-    source = create_engine(f"sqlite:///{source_path}")
+def seed(name: str, target_url: str, reset: bool = False) -> dict:
+    db = DATABASES[name]
+    tables = [t for t in db.metadata.sorted_tables if db.includes(t.name)]
+    source = create_engine(f"sqlite:///{SOURCES[name]}")
     target = create_engine(target_url)
-    metadata.create_all(target, tables=tables)
     copied = {}
-    with source.connect() as src, target.begin() as dst:
-        if reset:
-            for table in reversed(tables):  # children before parents
-                dst.execute(delete(table))
-        for table in tables:  # parents before children
-            if dst.execute(select(func.count()).select_from(table)).scalar():
-                copied[table.name] = "kept existing rows"
-                continue
-            rows = [dict(r._mapping) for r in src.execute(select(table))]
-            if rows:
-                dst.execute(insert(table), rows)
-            copied[table.name] = len(rows)
-    source.dispose()
-    target.dispose()
+    try:
+        missing = [t.name for t in tables if t.name not in set(inspect(target).get_table_names())]
+        if missing:
+            raise RuntimeError(f"{name}: tables {missing} don't exist. Run `python -m service.scripts.migrate` first.")
+        with source.connect() as src, target.begin() as dst:
+            if reset:
+                for table in reversed(tables):  # children before parents
+                    dst.execute(delete(table))
+            for table in tables:  # parents before children
+                if dst.execute(select(func.count()).select_from(table)).scalar():
+                    copied[table.name] = "kept existing rows"
+                    continue
+                rows = [dict(r._mapping) for r in src.execute(select(table))]
+                if rows:
+                    dst.execute(insert(table), rows)
+                copied[table.name] = len(rows)
+    finally:
+        source.dispose()
+        target.dispose()
     return copied
 
 
@@ -59,13 +61,17 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--reset", action="store_true", help="empty the tables and reload the demo data")
     args = parser.parse_args(argv)
-    missing = [name for name in TARGETS if not os.getenv(name)]
+    missing = [db.url_env for db in DATABASES.values() if not os.getenv(db.url_env)]
     if missing:
         logger.error("Set %s", ", ".join(missing))
         return 1
-    for env, (path, metadata, names) in TARGETS.items():
-        result = seed(path, metadata, names, os.environ[env], reset=args.reset)
-        logger.info("%s: %s", env, result)
+    for name, db in DATABASES.items():
+        try:
+            result = seed(name, os.environ[db.url_env], reset=args.reset)
+        except RuntimeError as exc:
+            logger.error("%s", exc)
+            return 1
+        logger.info("%s: %s", db.url_env, result)
     return 0
 
 

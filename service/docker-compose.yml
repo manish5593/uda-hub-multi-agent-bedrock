@@ -1,7 +1,7 @@
 # UDA-Hub as microservices. From the service/ folder:
 #   cp .env.example .env && cp llm.env.example llm.env   # then fill both in
 #   docker compose up --build
-#   docker compose --profile monitoring up --build        # also Prometheus on :9090
+#   docker compose --profile monitoring up --build        # also Prometheus (:9090) and Grafana (:3000)
 # Only the gateway is published (port 8080); everything else is on the internal network.
 name: udahub
 
@@ -44,17 +44,26 @@ services:
       retries: 10
     networks: [internal]
 
-  # One-shot job: creates the tables and loads the demo data into empty databases
-  seed:
+  # One-shot job: brings every service database to the latest schema (Alembic, service/migrations)
+  migrate:
     <<: *backend
     restart: "no"
-    command: ["python", "-m", "service.scripts.seed"]
-    environment:
+    command: ["python", "-m", "service.scripts.migrate"]
+    environment: &service-db-urls
       CULTPASS_DB_URL: postgresql+psycopg://cultpass_svc:${CULTPASS_DB_PASSWORD}@db:5432/cultpass
       TICKETS_DB_URL: postgresql+psycopg://tickets_svc:${TICKETS_DB_PASSWORD}@db:5432/tickets
       KNOWLEDGE_DB_URL: postgresql+psycopg://knowledge_svc:${KNOWLEDGE_DB_PASSWORD}@db:5432/knowledge
     depends_on:
       db: {condition: service_healthy}
+
+  # One-shot job: loads the demo data into empty tables
+  seed:
+    <<: *backend
+    restart: "no"
+    command: ["python", "-m", "service.scripts.seed"]
+    environment: *service-db-urls
+    depends_on:
+      migrate: {condition: service_completed_successfully}
 
   cultpass:
     <<: *backend
@@ -130,10 +139,32 @@ services:
   prometheus:
     profiles: [monitoring]
     image: prom/prometheus:v2.55.1
+    restart: unless-stopped
     volumes:
       - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
     ports:
-      - "9090:9090"
+      - "127.0.0.1:9090:9090"
+    networks: [internal]
+
+  # Dashboards: http://localhost:3000, user admin. The datasource and the UDA-Hub dashboard are provisioned
+  # from monitoring/grafana, so they come back whenever the container is recreated.
+  grafana:
+    profiles: [monitoring]
+    image: grafana/grafana:13.2.4
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/udahub.json
+    volumes:
+      - ./monitoring/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./monitoring/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on: [prometheus]
     networks: [internal]
 
 networks:
@@ -142,3 +173,4 @@ networks:
 volumes:
   pgdata: {}
   agent-logs: {}
+  grafana-data: {}

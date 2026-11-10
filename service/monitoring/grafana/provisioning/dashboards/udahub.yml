@@ -1,0 +1,10 @@
+# Dashboards are files in monitoring/grafana/dashboards: edit them there (or export from the UI into
+# that folder), not only in the Grafana UI, where changes would be lost when the container is recreated.
+apiVersion: 1
+providers:
+  - name: udahub
+    folder: UDA-Hub
+    type: file
+    allowUiUpdates: false
+    options:
+      path: /var/lib/grafana/dashboards
