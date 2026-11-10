@@ -24,7 +24,7 @@ graph TD
     LC --> CL[classifier<br/>structured triage]
     CL --> SU{supervisor<br/>identify customer +<br/>rule-based routing}
     SU -->|how-to / policy| KA[knowledge_agent<br/>RAG over KB]
-    SU -->|needs account data/action| AA[account_agent<br/>ReAct + CultPass tools]
+    SU -->|needs account data/action| AA[account_agent<br/>create_agent + CultPass tools]
     SU -->|guest needs account action| RI[request_info<br/>ask for email]
     SU -->|human requested / critical / blocked /<br/>repeat issue / low confidence| EA[escalation_agent<br/>handoff note]
     KA --> QG{quality_gate<br/>confidence & grounding}
@@ -151,10 +151,10 @@ Thresholds are set in `agentic/config.py` and can be overridden with env vars.
 | Kind | Where | What |
 |---|---|---|
 | **State** | `UdaHubState` (LangGraph) | Classification, route, retrieved articles, tool actions, assessment and trace for the current step of the execution. |
-| **Short-term** | `MemorySaver` checkpointer, keyed by `thread_id` = ticket id | The session's conversation, customer and metadata, so follow-ups ("cancel *that one*") work within a session. |
+| **Short-term** | Checkpointer keyed by `thread_id` = ticket id: `MemorySaver` (in memory) in the notebooks and tests, `PostgresSaver` in the agent service ([`service/`](../../../service/README.md)) | The session's conversation, customer and metadata, so follow-ups ("cancel *that one*") work within a session. With `PostgresSaver` the conversation also survives restarts, and any agent replica can continue any ticket. |
 | **Long-term** | `udahub.db`: `customer_memory` table, plus `tickets` and `ticket_messages` | Customer preferences, personal facts and reported issues, previous tickets (issue, status, last reply) and the full message log. These are recalled at the start of every new ticket for that customer. Only facts the customer stated are stored. State the system can look up live, such as reservations, is never stored, so it can't go stale. |
 | **Inspection by `thread_id`** | The checkpointer | `orchestrator.get_state(config)` returns a ticket's messages, tool usage (`actions_taken`) and decision `trace`; `get_state_history(config)` returns every checkpoint, which shows the order the nodes ran in. |
-| **Recovery after a restart** | `ticket_messages` in `udahub.db` | The checkpointer is in memory only. When a new session starts on an existing ticket, `load_context` reloads the ticket's saved messages as `ticket_history`, so the conversation continues. |
+| **Recovery after a restart** | `ticket_messages` in `udahub.db` | With `MemorySaver`, the checkpointer is lost on restart. When a new session starts on an existing ticket, `load_context` reloads the ticket's saved messages as `ticket_history`, so the conversation continues. |
 
 ## Tools (`agentic/tools`)
 
@@ -162,9 +162,10 @@ Thresholds are set in `agentic/config.py` and can be overridden with env vars.
   subscription, premium tier, slots, monthly quota and ownership checks. `build_account_tools(user_id, ticket_id)`
   wraps them as LangChain tools with the customer id bound in, so the LLM can't act on another account. The
   wrappers also refuse reservation and experience ids that no lookup returned in the same turn.
-- `knowledge_tools.py`: `KnowledgeRetriever` builds an `InMemoryVectorStore` with OpenAI embeddings
-  (`text-embedding-3-small`) over the account's `knowledge` table, and keeps articles scoring at least 0.30. If
-  embeddings are unavailable, it falls back to IDF keyword scoring.
+- `knowledge_tools.py`: `KnowledgeRetriever` builds an `InMemoryVectorStore` over the account's `knowledge`
+  table with the configured embedding model (OpenAI `text-embedding-3-small` by default, Amazon Bedrock Titan, or
+  a SageMaker endpoint), and keeps articles scoring at least 0.30. If embeddings are unavailable, it falls back
+  to IDF keyword scoring.
 - `ticket_tools.py`: ticket creation and linking, message log, metadata updates, prior tickets, and long-term memory,
   with a duplicate check that ignores case and punctuation.
 
@@ -187,7 +188,19 @@ Each decision with real consequences is enforced in code rather than left to a p
 | Storing stale, invented or personal memories | The memory writer sees only the customer's messages. Filters drop reservation state, named experiences, one-off requests and contact details, and duplicates are skipped | `customer_messages_text`, `drop_reason`, `save_memory` |
 
 These rules are covered by the offline tests in `tests/`. The demo results in the [root README](../../../README.md#demo-results)
-show them working against the real model.
+show them working against the real model, and the [evaluation suite](../../evals/README.md) measures them over
+repeated runs: routing, outcomes, escalation teams, tool calls, and whether replies are supported by the evidence.
+
+## Deployment
+
+The same graph runs in two ways, with the same agents, prompts, tools and rules:
+
+- **In process** (notebooks, tests, evaluation): the tools read and write the SQLite files in `data/`, and the
+  checkpointer is `MemorySaver`.
+- **As microservices** ([`service/`](../../../service/README.md)): an API gateway, the agent service, and CultPass,
+  ticket and knowledge services, each with its own Postgres database. The agent's tools call the other services
+  over HTTP (`agentic/remote`), the checkpointer is `PostgresSaver`, schema changes are Alembic migrations, and
+  Prometheus and Grafana show traffic and support outcomes.
 
 ## Logging
 

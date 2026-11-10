@@ -1,6 +1,6 @@
 # UDA-Hub as microservices
 
-This folder runs UDA-Hub as five services behind one API gateway, with Postgres. The approach follows
+This folder runs UDA-Hub as four services behind an API gateway, with Postgres. The approach follows
 [fastapi-langgraph-agent-production-ready-template](https://github.com/wassim249/fastapi-langgraph-agent-production-ready-template),
 but splits the system along the lines that already exist in the code: the CultPass system, ticket storage,
 the knowledge base, and the agents.
@@ -20,27 +20,52 @@ credentials is still to do.
 ```mermaid
 %%{init: {"theme": "base", "themeVariables": {"fontSize": "15px", "background": "#0f172a", "lineColor": "#94a3b8", "textColor": "#ffffff", "primaryTextColor": "#ffffff", "edgeLabelBackground": "#1e293b", "tertiaryTextColor": "#ffffff"}}}%%
 graph LR
-    C([Channel integration<br/>web chat, email bridge]) -->|X-API-Key| GW[gateway<br/>API keys, rate limit]
-    GW -->|POST message| AG[agent<br/>LangGraph workflow]
+    C([Channel integration<br/>web chat, email bridge]) -->|X-API-Key| GW
+    subgraph SVC [services on the internal network]
+        GW[gateway<br/>API keys, rate limit]
+        AG[agent<br/>LangGraph workflow]
+        CP[cultpass<br/>CultPass system]
+        TS[tickets<br/>tickets + memory]
+        KS[knowledge<br/>KB + embeddings]
+    end
+    GW -->|POST message| AG
     GW -->|GET ticket, messages| TS
-    AG -->|accounts, bookings| CP[cultpass<br/>CultPass system]
-    AG -->|tickets, memory| TS[tickets<br/>tickets + memory]
-    AG -->|RAG search| KS[knowledge<br/>KB + embeddings]
-    AG -.->|chat model| LLM[(OpenAI or Bedrock)]
-    KS -.->|embeddings| EMB[(OpenAI, Bedrock<br/>or SageMaker)]
-    CP --- D1[(cultpass)]
-    TS --- D2[(tickets)]
-    KS --- D3[(knowledge)]
-    AG --- D4[(agent_state<br/>checkpoints)]
+    AG -->|accounts, bookings| CP
+    AG -->|tickets, memory| TS
+    AG -->|RAG search| KS
+    subgraph PG [Postgres, a database per service]
+        D1[(cultpass)]
+        D2[(tickets)]
+        D3[(knowledge)]
+        D4[(agent_state<br/>checkpoints)]
+    end
+    subgraph MODELS [model providers]
+        LLM[(chat model<br/>OpenAI or Bedrock)]
+        EMB[(embeddings<br/>OpenAI, Bedrock<br/>or SageMaker)]
+    end
+    CP --- D1
+    TS --- D2
+    KS --- D3
+    AG --- D4
+    AG -.->|chat model| LLM
+    KS -.->|embeddings| EMB
+    JOBS[migrate, then seed<br/>one-shot jobs] -->|schema + demo data| D1 & D2 & D3
+    PR[prometheus] -.->|scrapes /metrics| SVC
+    GF([grafana<br/>UDA-Hub dashboard]) -->|queries| PR
 
     classDef edge fill:#1e293b,stroke:#94a3b8,color:#ffffff,font-weight:bold
     classDef agent fill:#4c1d95,stroke:#c4b5fd,color:#ffffff,font-weight:bold
     classDef data fill:#14532d,stroke:#86efac,color:#ffffff,font-weight:bold
     classDef ext fill:#7f1d1d,stroke:#fca5a5,color:#ffffff,font-weight:bold
+    classDef ops fill:#713f12,stroke:#fcd34d,color:#ffffff,font-weight:bold
     class C,GW edge
     class AG agent
     class CP,TS,KS,D1,D2,D3,D4 data
     class LLM,EMB ext
+    class JOBS,PR,GF ops
+    style SVC fill:#0f172a,stroke:#64748b,color:#ffffff
+    style PG fill:#0f172a,stroke:#64748b,color:#ffffff
+    style MODELS fill:#0f172a,stroke:#64748b,color:#ffffff
 ```
 
 | Service | Owns | Does | Talks to |
@@ -50,6 +75,16 @@ graph LR
 | `cultpass` | `cultpass` DB | The CultPass system of record: customers, subscriptions, experiences, reservations, and their rules (quota, premium tier, blocked accounts, free slots) | nothing |
 | `tickets` | `tickets` DB | Tickets, messages, UDA-Hub users and long-term customer memory | nothing |
 | `knowledge` | `knowledge` DB | Knowledge-base articles and their embedding index; RAG search with the keyword fallback | the embedding model |
+
+Supporting containers:
+
+| Container | Runs | Does |
+|---|---|---|
+| `db` | Always | Postgres 16: one database and one login role per service, created on first start |
+| `migrate` | Once per `up`, before the services | Brings the cultpass, tickets and knowledge databases to the latest schema ([Schema migrations](#schema-migrations)) |
+| `seed` | Once per `up`, after `migrate` | Loads the demo data into empty tables |
+| `prometheus` | `--profile monitoring` | Scrapes `/metrics` on every service every 15 seconds |
+| `grafana` | `--profile monitoring` | The UDA-Hub overview dashboard ([Monitoring](#monitoring)) |
 
 Each service has its **own database and its own Postgres role**, which can't connect to any other database.
 They share one Postgres server to keep the demo cheap; moving a database to its own server only changes a URL.
