@@ -1,0 +1,19 @@
+# Runtime dependencies of the backend image (CultPass, Ticket, Knowledge and Agent services, and the seed job).
+# Pinned to the versions the service tests ran with.
+boto3==1.43.127
+fastapi==0.162.2
+httpx==0.28.1
+langchain-aws==1.9.2
+langchain-core==1.7.6
+langchain-openai==1.7.4
+langgraph==1.2.20
+langgraph-checkpoint==4.3.1
+langgraph-checkpoint-postgres==3.2.0
+langgraph-prebuilt==1.1.1
+numpy==2.4.6
+prometheus-client==0.26.0
+psycopg[binary]==3.3.8
+psycopg-pool==3.3.3
+pydantic==2.14.3
+SQLAlchemy==2.1.8
+uvicorn[standard]==0.54.0

@@ -7,6 +7,19 @@ DATA_DIR = STARTER_DIR / "data"
 
 UDAHUB_DB_PATH = Path(os.getenv("UDAHUB_DB_PATH", DATA_DIR / "core" / "udahub.db"))
 CULTPASS_DB_PATH = Path(os.getenv("CULTPASS_DB_PATH", DATA_DIR / "external" / "cultpass.db"))
+# SQLAlchemy URLs (e.g. postgresql+psycopg://...) that replace the SQLite files above when set.
+# The microservices in service/ use these; the notebooks and tests keep using the SQLite files.
+UDAHUB_DB_URL = os.getenv("UDAHUB_DB_URL") or None
+CULTPASS_DB_URL = os.getenv("CULTPASS_DB_URL") or None
+
+# Microservices (see service/README.md). When a URL is set, the matching tools call that service over
+# HTTP instead of opening its database, so the agent never touches another service's data directly.
+CULTPASS_SERVICE_URL = os.getenv("CULTPASS_SERVICE_URL") or None
+TICKET_SERVICE_URL = os.getenv("TICKET_SERVICE_URL") or None
+KNOWLEDGE_SERVICE_URL = os.getenv("KNOWLEDGE_SERVICE_URL") or None
+# Shared secret the services require on every internal request (header X-Internal-Token)
+INTERNAL_API_TOKEN = os.getenv("INTERNAL_API_TOKEN") or None
+SERVICE_TIMEOUT_SECONDS = float(os.getenv("UDAHUB_SERVICE_TIMEOUT", 15))
 
 DEFAULT_ACCOUNT_ID = os.getenv("UDAHUB_DEFAULT_ACCOUNT", "cultpass")
 GUEST_EXTERNAL_USER_ID = "guest"

@@ -11,6 +11,7 @@ from typing import Literal, Optional
 
 from langchain_core.tools import StructuredTool
 
+from agentic.remote.http import remote
 from agentic.tools.db import cultpass_engine, session_scope
 from agentic.tools import ticket_tools
 from data.models import cultpass
@@ -52,6 +53,7 @@ def _used_this_month(session, user_id: str) -> int:
 # Plain functions (unit-testable, no LLM involved)
 # ---------------------------------------------------------------------------
 
+@remote("cultpass")
 def get_customer_profile(user_id: str) -> Optional[dict]:
     with session_scope(cultpass_engine()) as session:
         user = session.get(cultpass.User, user_id)
@@ -73,6 +75,7 @@ def get_customer_profile(user_id: str) -> Optional[dict]:
         return profile
 
 
+@remote("cultpass")
 def find_customer_by_email(email: str) -> Optional[dict]:
     with session_scope(cultpass_engine()) as session:
         user = (
@@ -84,6 +87,7 @@ def find_customer_by_email(email: str) -> Optional[dict]:
     return get_customer_profile(user_id) if user_id else None
 
 
+@remote("cultpass")
 def list_reservations(user_id: str) -> list[dict]:
     with session_scope(cultpass_engine()) as session:
         rows = (
@@ -105,12 +109,14 @@ def list_reservations(user_id: str) -> list[dict]:
         ]
 
 
+@remote("cultpass")
 def experience_titles() -> list[str]:
     """Titles of every experience in the catalog, past and upcoming."""
     with session_scope(cultpass_engine()) as session:
         return [title for (title,) in session.query(cultpass.Experience.title).all()]
 
 
+@remote("cultpass")
 def search_experiences(query: str = "", location: str = "", only_available: bool = True) -> list[dict]:
     with session_scope(cultpass_engine()) as session:
         q = session.query(cultpass.Experience).filter(cultpass.Experience.when >= datetime.now())
@@ -138,10 +144,13 @@ def search_experiences(query: str = "", location: str = "", only_available: bool
         return results
 
 
+@remote("cultpass")
 def reserve_experience(user_id: str, experience_id: str) -> dict:
     with session_scope(cultpass_engine()) as session:
         user = session.get(cultpass.User, user_id)
-        exp = session.get(cultpass.Experience, experience_id)
+        # Lock the experience row until commit so two concurrent bookings can't take the last slot
+        # (Postgres; SQLite ignores it and serialises writers anyway)
+        exp = session.get(cultpass.Experience, experience_id, with_for_update=True)
         if user is None or exp is None:
             return {"success": False, "error": "Unknown customer or experience id."}
         if user.is_blocked:
@@ -178,9 +187,10 @@ def reserve_experience(user_id: str, experience_id: str) -> dict:
         }
 
 
+@remote("cultpass")
 def cancel_reservation(user_id: str, reservation_id: str) -> dict:
     with session_scope(cultpass_engine()) as session:
-        r = session.get(cultpass.Reservation, reservation_id)
+        r = session.get(cultpass.Reservation, reservation_id, with_for_update=True)
         if r is None or r.user_id != user_id:
             return {"success": False, "error": "Reservation not found for this customer."}
         if r.status != "reserved":
@@ -196,6 +206,7 @@ def cancel_reservation(user_id: str, reservation_id: str) -> dict:
         }
 
 
+@remote("cultpass")
 def manage_subscription(user_id: str, action: str) -> dict:
     transitions = {
         "pause": ({"active"}, "paused"),

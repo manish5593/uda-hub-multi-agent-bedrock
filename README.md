@@ -35,6 +35,7 @@ Business rules and policies are enforced in code, not left to prompts: the LLM p
 | Path | Contents |
 |---|---|
 | `solution/` | The complete, working project, with its own guide in [`solution/README.md`](solution/README.md) |
+| `service/` | The same system as microservices (gateway, agent, CultPass, tickets, knowledge) with Postgres and Docker Compose, in [`service/README.md`](service/README.md) |
 | `requirements.txt` | Python dependencies |
 
 ```
@@ -46,6 +47,7 @@ solution/
 │   ├── workflow.py              # LangGraph graph: `orchestrator`, `process_ticket()`
 │   ├── agents/                  # classifier, supervisor, resolvers, quality gate, escalation, memory
 │   ├── tools/                   # CultPass tools, RAG retriever, ticket and memory storage
+│   ├── remote/                  # HTTP clients the tools use when running as microservices (service/)
 │   ├── design/                  # architecture diagram, Mermaid graph and design document
 │   ├── config.py                # model providers, models, paths and thresholds
 │   ├── llm.py                   # chat and embedding models for OpenAI, Bedrock or SageMaker
@@ -61,6 +63,7 @@ solution/
 |---|---|
 | [`report.md`](report.md) | Project report: architecture, results, the problems found in real-model testing and how each was fixed, lessons, and limitations |
 | [`solution/README.md`](solution/README.md) | Project guide: ticket flow, demo results, and where each requirement is met |
+| [`service/README.md`](service/README.md) | Microservices: architecture, how the split works, running with Docker Compose, the public API, and limitations |
 | [`agentic/design/`](solution/agentic/design/README.md) | Architecture, routing rules, resolve-or-escalate logic, memory, and safeguards |
 | [`agentic/agents/`](solution/agentic/agents/README.md) | Each agent node, the long-term memory rules, and how to add an agent |
 | [`agentic/tools/`](solution/agentic/tools/README.md) | Each tool and the rules it enforces, retrieval, and how to add a tool |
