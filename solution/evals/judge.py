@@ -1,0 +1,93 @@
+"""LLM judge for what code can't check: is the reply supported by the evidence, and does it make the points
+the case expects.
+
+The judge sees only the customer's messages, the reply, and the evidence the agents had (the knowledge base
+articles they retrieved, the tool calls and results, and the customer's profile). It uses the configured
+chat model unless UDAHUB_EVAL_JUDGE_MODEL names another one from the same provider. A judge from a stronger
+model is more reliable, and avoids a model grading its own replies.
+"""
+import json
+import os
+from functools import lru_cache
+
+from langchain_core.language_models import BaseChatModel
+from langchain_core.messages import HumanMessage, SystemMessage
+from pydantic import BaseModel, Field
+
+from agentic import config
+from agentic.tools.knowledge_tools import format_articles
+
+FAITHFULNESS_PROMPT = """You check replies written by an AI customer support agent for CultPass.
+List every factual claim in the reply that the evidence does not support: policies, prices, steps, dates,
+numbers, account details, or actions the reply says were taken. The evidence is the only source of truth.
+Do not count greetings, empathy, offers to help further, or questions to the customer as claims.
+A claim the evidence contradicts is unsupported."""
+
+KEY_POINTS_PROMPT = """You check replies written by an AI customer support agent for CultPass.
+For each expected point, decide whether the reply makes it. Judge the meaning, not the wording; the reply
+may be in any language. A point that says the reply must NOT do something is met when the reply doesn't
+do it."""
+
+
+class Faithfulness(BaseModel):
+    unsupported_claims: list[str] = Field(description="Claims in the reply the evidence doesn't support; empty if none")
+
+
+class PointVerdict(BaseModel):
+    point: str
+    met: bool
+    reason: str = Field(description="One short sentence")
+
+
+class KeyPoints(BaseModel):
+    verdicts: list[PointVerdict] = Field(description="One verdict per expected point, in the same order")
+
+
+@lru_cache(maxsize=None)
+def judge_llm() -> BaseChatModel:
+    model = os.getenv("UDAHUB_EVAL_JUDGE_MODEL") or config.CHAT_MODEL
+    if config.LLM_PROVIDER == "bedrock":
+        from langchain_aws import ChatBedrockConverse
+        return ChatBedrockConverse(model=model, region_name=config.AWS_REGION, temperature=0, max_tokens=2048)
+    from langchain_openai import ChatOpenAI
+    return ChatOpenAI(model=model, temperature=0)
+
+
+def judge_model_name() -> str:
+    return os.getenv("UDAHUB_EVAL_JUDGE_MODEL") or config.CHAT_MODEL
+
+
+def evidence_text(state: dict) -> str:
+    parts = []
+    customer = state.get("customer") or {}
+    if customer.get("identified"):
+        parts.append("Customer profile:\n" + json.dumps(
+            {k: customer.get(k) for k in ("name", "email", "is_blocked", "subscription")}, default=str))
+    if state.get("knowledge"):
+        parts.append("Knowledge base articles:\n" + format_articles(state["knowledge"]))
+    if state.get("actions_taken"):
+        parts.append("Tool calls and results:\n" + json.dumps(state["actions_taken"], indent=1, default=str))
+    return "\n\n".join(parts) or "No evidence."
+
+
+def check_faithfulness(customer_messages: list[str], reply: str, state: dict, llm=None) -> Faithfulness:
+    llm = llm or judge_llm()
+    return llm.with_structured_output(Faithfulness).invoke([
+        SystemMessage(content=FAITHFULNESS_PROMPT),
+        HumanMessage(content="Customer messages:\n" + "\n".join(customer_messages)
+                             + f"\n\nEvidence:\n{evidence_text(state)}\n\nReply:\n{reply}"),
+    ])
+
+
+def check_key_points(customer_messages: list[str], reply: str, points: list[str], llm=None) -> list[PointVerdict]:
+    llm = llm or judge_llm()
+    result: KeyPoints = llm.with_structured_output(KeyPoints).invoke([
+        SystemMessage(content=KEY_POINTS_PROMPT),
+        HumanMessage(content="Customer messages:\n" + "\n".join(customer_messages) + f"\n\nReply:\n{reply}\n\n"
+                             "Expected points:\n" + "\n".join(f"{i + 1}. {p}" for i, p in enumerate(points))),
+    ])
+    verdicts = list(result.verdicts)
+    if len(verdicts) != len(points):
+        raise ValueError(f"judge returned {len(verdicts)} verdicts for {len(points)} points")
+    # Keep the case's own wording of each point, whatever the judge echoed back
+    return [PointVerdict(point=p, met=v.met, reason=v.reason) for p, v in zip(points, verdicts)]

@@ -54,6 +54,7 @@ solution/
 │   └── state.py                 # graph state and structured-output schemas
 ├── data/                        # SQLAlchemy models, JSONL seed data and the SQLite databases
 ├── deploy/                      # deploy and delete the SageMaker embedding endpoint
+├── evals/                       # evaluation suite: labelled tickets run against the real model
 └── tests/                       # offline unit and end-to-end tests
 ```
 
@@ -64,6 +65,7 @@ solution/
 | [`report.md`](report.md) | Project report: architecture, results, the problems found in real-model testing and how each was fixed, lessons, and limitations |
 | [`solution/README.md`](solution/README.md) | Project guide: ticket flow, demo results, and where each requirement is met |
 | [`service/README.md`](service/README.md) | Microservices: architecture, how the split works, running with Docker Compose, monitoring with Grafana, schema migrations, the public API, and limitations |
+| [`evals/`](solution/evals/README.md) | Evaluation suite: running it, what is checked, and the case format |
 | [`agentic/design/`](solution/agentic/design/README.md) | Architecture, routing rules, resolve-or-escalate logic, memory, and safeguards |
 | [`agentic/agents/`](solution/agentic/agents/README.md) | Each agent node, the long-term memory rules, and how to add an agent |
 | [`agentic/tools/`](solution/agentic/tools/README.md) | Each tool and the rules it enforces, retrieval, and how to add a tool |
@@ -134,6 +136,13 @@ python -m pytest tests
 ```
 
 The tests need no API key. Each one runs against a temporary copy of the databases, so your data is not modified.
+
+To measure the real model, run the evaluation suite (needs the model settings in `.env`): 36 labelled tickets,
+3 runs each, scored in code and by an LLM judge. See [`solution/evals/README.md`](solution/evals/README.md).
+
+```bash
+python -m evals.run
+```
 
 ### Break Down Tests
 

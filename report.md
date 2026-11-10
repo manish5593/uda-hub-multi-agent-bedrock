@@ -161,8 +161,10 @@ reveal what the real model will do.
   like "outdoor activities" work directly.
 - **Memory filters are pattern-based.** They block every slip seen in testing, but a new kind could still get
   through. An evaluation set of conversations and expected memories would measure it.
-- **No evaluation suite yet.** The next step is a labelled ticket set to measure routing accuracy and
-  answer faithfulness over many runs, rather than inspecting individual runs.
+- **The evaluation suite hasn't been run against the real model yet.** `solution/evals` has 36 labelled
+  tickets that measure classification, routing, outcomes, escalation teams, tool calls, and (with an LLM
+  judge) answer faithfulness and expected points, over repeated runs. It doesn't yet check what is written to
+  long-term memory.
 - **Single platform.** Knowledge search already works per account, but the account tools are CultPass-specific.
 
 ## 8. Repository
