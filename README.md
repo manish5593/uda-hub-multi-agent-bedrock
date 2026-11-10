@@ -28,6 +28,8 @@ A ticket in natural language, plus optional metadata (customer, channel, urgency
 Business rules and policies are enforced in code, not left to prompts: the LLM proposes, and code decides. See
 [Safeguards](solution/agentic/design/README.md#safeguards-the-llm-proposes-code-decides).
 
+![UDA-Hub architecture](solution/agentic/design/architecture.svg)
+
 The same agents run in two ways:
 
 - **In process**, from the notebooks or `process_ticket()`, against the committed SQLite databases (`solution/`).
@@ -35,11 +37,11 @@ The same agents run in two ways:
   Compose. This version adds Alembic migrations, and Prometheus metrics with a Grafana dashboard
   ([`service/`](service/README.md)).
 
+![UDA-Hub deployment as microservices](solution/agentic/design/deployment.svg)
+
 An evaluation suite ([`solution/evals/`](solution/evals/README.md)) runs 36 labelled tickets against the real model
 and reports routing, outcome, tool and answer accuracy. GitHub Actions runs the offline tests on every pull
 request.
-
-![UDA-Hub architecture](solution/agentic/design/architecture.svg)
 
 ## Repository layout
 

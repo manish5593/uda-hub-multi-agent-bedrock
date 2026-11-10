@@ -114,9 +114,10 @@ So the agents, prompts, tools and rules are unchanged, and each business rule is
 | `migrate`, `seed` jobs | Alembic migrations, one history per database, then the demo data. Databases created before the migrations are adopted, not recreated |
 | Monitoring | Request metrics on every service, plus what the agent did with each message (outcome, route, escalation team and priority, tools). Prometheus collects them, and a provisioned Grafana dashboard shows support outcomes, traffic, errors and latency |
 
+![UDA-Hub deployment as microservices](solution/agentic/design/deployment.svg)
+
 The whole stack has been built and run with Docker Compose. That run used a placeholder model key, so every
 message got the fallback reply; the gateway, health checks, migrations, seeding, metrics and dashboard worked.
-The architecture diagram is in [`service/README.md`](service/README.md#architecture).
 
 ### Evaluation suite
 

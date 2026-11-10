@@ -17,6 +17,10 @@ credentials is still to do.
 
 ## Architecture
 
+![UDA-Hub deployment as microservices](../solution/agentic/design/deployment.svg)
+
+The same, as a Mermaid diagram:
+
 ```mermaid
 %%{init: {"theme": "base", "themeVariables": {"fontSize": "15px", "background": "#0f172a", "lineColor": "#94a3b8", "textColor": "#ffffff", "primaryTextColor": "#ffffff", "edgeLabelBackground": "#1e293b", "tertiaryTextColor": "#ffffff"}}}%%
 graph LR
