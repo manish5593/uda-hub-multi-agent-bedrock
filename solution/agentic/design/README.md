@@ -12,6 +12,7 @@ Files in this folder:
 | File | Contents |
 |---|---|
 | `architecture.svg` | The architecture diagram above: agents, decision paths, tools, data stores and memory |
+| `deployment.svg` | The microservices deployment (see [Deployment](#deployment)): API gateway, services, Postgres, migrations, Prometheus and Grafana, and the model providers |
 | `workflow_graph.mmd` | Mermaid source exported from the compiled graph (`orchestrator.get_graph().draw_mermaid()`), with a dark `classDef` color scheme added at the end (same color meaning as `architecture.svg`). Re-apply them if you regenerate the file. |
 | `README.md` | This design document |
 
@@ -197,10 +198,12 @@ The same graph runs in two ways, with the same agents, prompts, tools and rules:
 
 - **In process** (notebooks, tests, evaluation): the tools read and write the SQLite files in `data/`, and the
   checkpointer is `MemorySaver`.
-- **As microservices** ([`service/`](../../../service/README.md)): an API gateway, the agent service, and CultPass,
+- **As microservices** ([`service/`](../../../service/README.md), diagram below): an API gateway, the agent service, and CultPass,
   ticket and knowledge services, each with its own Postgres database. The agent's tools call the other services
   over HTTP (`agentic/remote`), the checkpointer is `PostgresSaver`, schema changes are Alembic migrations, and
   Prometheus and Grafana show traffic and support outcomes.
+
+![UDA-Hub deployment as microservices](deployment.svg)
 
 ## Logging
 
