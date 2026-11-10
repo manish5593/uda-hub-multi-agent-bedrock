@@ -59,7 +59,7 @@ solution/
 ├── 03_agentic_app.ipynb         # demo scenarios (committed with outputs) and interactive chat
 ├── agentic/
 │   ├── workflow.py              # LangGraph graph: `orchestrator`, `process_ticket()`
-│   ├── agents/                  # classifier, supervisor, resolvers, quality gate, escalation, memory
+│   ├── agents/                  # classifier, supervisor, knowledge_agent, account_agent, quality_gate, escalation_agent, memory
 │   ├── tools/                   # CultPass tools, RAG retriever, ticket and memory storage
 │   ├── remote/                  # HTTP clients the tools use when running as microservices (service/)
 │   ├── design/                  # architecture diagram, Mermaid graph and design document
@@ -237,7 +237,7 @@ The model's wording varies from run to run, but the routes and outcomes above we
 
 | Deliverable | Where |
 |---|---|
-| Multi-agent architecture (Supervisor, Classifier, Resolvers, Escalation) | [`solution/agentic/agents/`](solution/agentic/agents/), [`solution/agentic/workflow.py`](solution/agentic/workflow.py) |
+| Multi-agent architecture (supervisor, classifier, knowledge_agent, account_agent, escalation_agent) | [`solution/agentic/agents/`](solution/agentic/agents/), [`solution/agentic/workflow.py`](solution/agentic/workflow.py) |
 | Architecture design | [`solution/agentic/design/README.md`](solution/agentic/design/README.md) |
 | Input handling (text + metadata) | `process_ticket()` in [`workflow.py`](solution/agentic/workflow.py), `load_context` in [`memory_agent.py`](solution/agentic/agents/memory_agent.py) |
 | Routing, RAG, resolve or escalate | [`supervisor.py`](solution/agentic/agents/supervisor.py), [`knowledge_agent.py`](solution/agentic/agents/knowledge_agent.py), [`quality_gate.py`](solution/agentic/agents/quality_gate.py). Notebook 03 also shows the routing rules on 10 sample tickets. |
