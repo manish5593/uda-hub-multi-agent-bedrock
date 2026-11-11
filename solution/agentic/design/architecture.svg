@@ -1,7 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 1130" width="1200" height="1130" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 1110" width="1200" height="1110" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">
 <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#4a5568"/></marker></defs>
 <style>.t{font-size:15px;font-weight:600;fill:#1a202c;text-anchor:middle}.s{font-size:12px;fill:#4a5568;text-anchor:middle}.l{font-size:11.5px;fill:#4a5568;font-style:italic}.h{font-size:24px;font-weight:700;fill:#1a202c}.sh{font-size:13px;fill:#4a5568}.ph{font-size:14px;font-weight:700;fill:#1a202c}</style>
-<rect width="1200" height="1130" fill="#ffffff"/>
+<rect width="1200" height="1110" fill="#ffffff"/>
 <text x="40" y="44" class="h">UDA-Hub: multi-agent support workflow (LangGraph)</text>
 <text x="40" y="66" class="sh">One graph run per customer message · thread_id = ticket id · models: OpenAI or Amazon Bedrock</text>
 <rect x="900" y="22" width="16" height="12" rx="3" fill="#efeafe" stroke="#6d4fd8"/>
@@ -25,12 +25,12 @@
 <text x="600.0" y="160.0" class="s">past tickets (long-term memory)</text>
 <path d="M600 169 V196" fill="none" stroke="#4a5568" stroke-width="1.6" marker-end="url(#arrow)"/>
 <rect x="480" y="200" width="240" height="64" rx="10" fill="#efeafe" stroke="#6d4fd8" stroke-width="1.6"/>
-<text x="600.0" y="221.0" class="t">Classifier</text>
+<text x="600.0" y="221.0" class="t">classifier</text>
 <text x="600.0" y="239.0" class="s">issue type, urgency, sentiment,</text>
 <text x="600.0" y="255.0" class="s">language, confidence</text>
 <path d="M600 264 V291" fill="none" stroke="#4a5568" stroke-width="1.6" marker-end="url(#arrow)"/>
 <rect x="480" y="295" width="240" height="64" rx="10" fill="#eef1f5" stroke="#5b6779" stroke-width="1.6"/>
-<text x="600.0" y="316.0" class="t">Supervisor</text>
+<text x="600.0" y="316.0" class="t">supervisor</text>
 <text x="600.0" y="334.0" class="s">identify customer +</text>
 <text x="600.0" y="350.0" class="s">rule-based routing</text>
 <path d="M600 359 V380" fill="none" stroke="#4a5568" stroke-width="1.6" stroke-dasharray="6 4"/>
@@ -40,15 +40,15 @@
 <path d="M780 380 V412" fill="none" stroke="#4a5568" stroke-width="1.6" stroke-dasharray="6 4" marker-end="url(#arrow)"/>
 <path d="M1020 380 V412" fill="none" stroke="#4a5568" stroke-width="1.6" stroke-dasharray="6 4" marker-end="url(#arrow)"/>
 <rect x="140" y="415" width="200" height="70" rx="10" fill="#efeafe" stroke="#6d4fd8" stroke-width="1.6"/>
-<text x="240.0" y="439.0" class="t">Knowledge agent</text>
+<text x="240.0" y="439.0" class="t">knowledge_agent</text>
 <text x="240.0" y="457.0" class="s">RAG over knowledge base</text>
 <text x="240.0" y="473.0" class="s">how-to &amp; policy</text>
 <rect x="400" y="415" width="200" height="70" rx="10" fill="#efeafe" stroke="#6d4fd8" stroke-width="1.6"/>
-<text x="500.0" y="439.0" class="t">Account agent</text>
+<text x="500.0" y="439.0" class="t">account_agent</text>
 <text x="500.0" y="457.0" class="s">create_agent + CultPass tools</text>
 <text x="500.0" y="473.0" class="s">data &amp; actions</text>
 <rect x="680" y="415" width="200" height="70" rx="10" fill="#fdecea" stroke="#c0392b" stroke-width="1.6"/>
-<text x="780.0" y="439.0" class="t">Escalation agent</text>
+<text x="780.0" y="439.0" class="t">escalation_agent</text>
 <text x="780.0" y="457.0" class="s">handoff note + reply</text>
 <text x="780.0" y="473.0" class="s">team &amp; priority</text>
 <rect x="920" y="415" width="200" height="70" rx="10" fill="#eef1f5" stroke="#5b6779" stroke-width="1.6"/>
@@ -59,7 +59,7 @@
 <path d="M240 485 V530 H308" fill="none" stroke="#4a5568" stroke-width="1.6" marker-end="url(#arrow)"/>
 <path d="M500 485 V518 H432" fill="none" stroke="#4a5568" stroke-width="1.6" marker-end="url(#arrow)"/>
 <rect x="310" y="505" width="120" height="50" rx="10" fill="#efeafe" stroke="#6d4fd8" stroke-width="1.6"/>
-<text x="370.0" y="535.0" class="t">Quality gate</text>
+<text x="370.0" y="535.0" class="t">quality_gate</text>
 <text x="360" y="600" class="l" text-anchor="end">confidence ≥ 0.7, grounded, policy OK?</text>
 <path d="M430 545 H640 V450 H676" fill="none" stroke="#4a5568" stroke-width="1.6" stroke-dasharray="6 4" marker-end="url(#arrow)"/>
 <text x="648" y="505" class="l" text-anchor="start">no → escalate</text>
@@ -82,12 +82,12 @@
 <text x="1000.0" y="849.0" class="t">Reply to customer</text>
 <text x="1000.0" y="867.0" class="s">resolved · awaiting_customer</text>
 <text x="1000.0" y="883.0" class="s">· escalated</text>
-<rect x="30" y="920" width="1140" height="192" rx="12" fill="none" stroke="#b7791f" stroke-width="1.2" stroke-dasharray="4 4"/>
+<rect x="30" y="920" width="1140" height="172" rx="12" fill="none" stroke="#b7791f" stroke-width="1.2" stroke-dasharray="4 4"/>
 <text x="48" y="944" class="ph">Tools &amp; data (agentic/tools, data/)</text>
 <rect x="48" y="956" width="262" height="70" rx="10" fill="#fff6e0" stroke="#b7791f" stroke-width="1.6"/>
 <text x="179.0" y="980.0" class="t">knowledge_tools</text>
 <text x="179.0" y="998.0" class="s">embeddings (OpenAI, Bedrock or SageMaker)</text>
-<text x="179.0" y="1014.0" class="s">keyword fallback · Knowledge agent</text>
+<text x="179.0" y="1014.0" class="s">keyword fallback · knowledge_agent</text>
 <rect x="326" y="956" width="262" height="70" rx="10" fill="#fff6e0" stroke="#b7791f" stroke-width="1.6"/>
 <text x="457.0" y="980.0" class="t">cultpass_tools</text>
 <text x="457.0" y="998.0" class="s">bound to the ticket's customer</text>
@@ -102,5 +102,4 @@
 <text x="1013.0" y="1014.0" class="s">MemorySaver · PostgresSaver (service/)</text>
 <text x="48" y="1052" class="sh">data/external/cultpass.db: users, subscriptions, experiences, reservations</text>
 <text x="48" y="1072" class="sh">data/core/udahub.db: accounts, users, tickets, ticket_metadata, ticket_messages, knowledge, customer_memory</text>
-<text x="48" y="1092" class="sh">As microservices (service/): the same tables in Postgres, one database per service (Alembic migrations); the tools call each service over HTTP</text>
 </svg>
