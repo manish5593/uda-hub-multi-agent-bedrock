@@ -13,9 +13,9 @@ sessions.
 | **Architecture** | Supervisor pattern in LangGraph: 7 agents in one `StateGraph` (11 nodes, 16 edges) |
 | **Models** | `gpt-4o-mini` for every agent and `text-embedding-3-small` for retrieval (the demo run). Claude on Amazon Bedrock, Titan embeddings and a SageMaker embedding endpoint are implemented as alternatives, but not yet run |
 | **Data** | Two SQLite databases: `cultpass.db` (customers, subscriptions, experiences, reservations) and `udahub.db` (tickets, messages, 18 knowledge articles, long-term memory). As microservices, the same tables in Postgres, one database per service |
-| **Deployment** | `service/`: an API gateway and four services (agent, CultPass, tickets, knowledge) with Postgres, Alembic migrations, Docker Compose, and Prometheus with a Grafana dashboard (section 4) |
+| **Deployment** | `service/`: an API gateway and five services (agent, CultPass, tickets, knowledge, auth) with Postgres, Alembic migrations, Docker Compose, customer sign-up and login with JWTs, Prometheus with a Grafana dashboard, and optional Langfuse tracing (section 4) |
 | **Demonstration** | `solution/03_agentic_app.ipynb`, committed with the outputs of a real-model run: 13 scenarios, 5 edge cases, and demos of routing, retrieval, tools, memory and logs |
-| **Tests** | 70 offline tests in `solution/tests` (24 unit, 20 end-to-end through the graph with a scripted model, 26 for the evaluation suite) and 58 in `service/tests` (services, the full HTTP flow, migrations on SQLite and Postgres). No API key needed; GitHub Actions runs them on every pull request |
+| **Tests** | 74 offline tests in `solution/tests` (24 unit, 20 end-to-end through the graph with a scripted model, 26 for the evaluation suite, 4 for tracing) and 101 in `service/tests` (services, customer logins and tokens, the full HTTP flow, migrations on SQLite and Postgres). No API key needed; GitHub Actions runs them on every pull request |
 | **Evaluation** | `solution/evals`: 36 labelled tickets run against the real model, scored in code and by an LLM judge (section 4). Built, but not yet run: the course API key was suspended |
 | **Environment** | Python 3.11, LangGraph 1.2.20, LangChain 1.4.9, langchain-openai 1.7.4, langchain-aws 1.9.2, SQLAlchemy 2.1, FastAPI 0.162, Postgres 16 |
 
@@ -102,17 +102,19 @@ ticket for a human, and sends a fallback reply instead of crashing.
 
 ### Microservices
 
-`service/` runs the same graph as four services behind an API gateway. Each data function in `agentic/tools` runs
+`service/` runs the same graph as five services behind an API gateway. Each data function in `agentic/tools` runs
 locally against its database, or over HTTP against the service that owns the data, depending on configuration.
 So the agents, prompts, tools and rules are unchanged, and each business rule is still written once.
 
 | Part | What it adds |
 |---|---|
-| `gateway` | The only public endpoint: API keys, a rate limit per key, request ids, and replies without internal traces |
+| `gateway` | The only public endpoint: API keys for channel integrations, JWT access tokens for logged-in customers (who only see their own tickets), a rate limit per caller, request ids, and replies without internal traces |
 | `agent` | Runs the workflow. Conversations are kept in Postgres (`PostgresSaver`), so they survive restarts and any replica can continue any ticket; an advisory lock stops two messages on one ticket from running at once |
 | `cultpass`, `tickets`, `knowledge` | Own their data, each in its own Postgres database and role |
-| `migrate`, `seed` jobs | Alembic migrations, one history per database, then the demo data. Databases created before the migrations are adopted, not recreated |
+| `auth` | Customer sign-up, verified by a code sent to the CultPass email, and login. Stores bcrypt password hashes, locks a login after repeated failures, and issues the access tokens the gateway verifies |
+| `db-setup`, `migrate`, `seed` jobs | Any missing database and role, Alembic migrations, one history per database, then the demo data. Databases created before the migrations are adopted, not recreated |
 | Monitoring | Request metrics on every service, plus what the agent did with each message (outcome, route, escalation team and priority, tools). Prometheus collects them, and a provisioned Grafana dashboard shows support outcomes, traffic, errors and latency |
+| Tracing (optional) | Langfuse, self-hosted: every graph run, node, model call and tool call, grouped by ticket |
 
 ![UDA-Hub deployment as microservices](solution/agentic/design/deployment.svg)
 

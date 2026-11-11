@@ -18,7 +18,7 @@ config:
 %% Hand-written. The nodes and edges match agentic/workflow.py; check them against
 %% orchestrator.get_graph().draw_mermaid() when the graph changes.
 flowchart TD
-    IN(["<span style='color:rgb(26,32,44)'>Incoming ticket<br/><small style='font-weight:normal;font-size:13px'>message + metadata<br/>customer · channel · urgency</small></span>"])
+    IN(["<span style='color:rgb(26,32,44)'>Incoming ticket<br/><small style='font-weight:normal;font-size:13px'>message + channel, urgency<br/>customer: login token or metadata</small></span>"])
     load_context("<span style='color:rgb(26,32,44)'>load_context<br/><small style='font-weight:normal;font-size:13px'>ticket, customer, preferences,<br/>past tickets (long-term memory)</small></span>")
     classifier("<span style='color:rgb(26,32,44)'>classifier <b style='color:rgb(255,255,255);background-color:rgb(229,62,62);border-radius:8px;padding:1px 6px;font-size:11px'>LLM</b><br/><small style='font-weight:normal;font-size:13px'>issue type, urgency, sentiment,<br/>language, confidence</small></span>")
     supervisor("<span style='color:rgb(26,32,44)'>supervisor<br/><small style='font-weight:normal;font-size:13px'>identify customer +<br/>rule-based routing</small></span>")

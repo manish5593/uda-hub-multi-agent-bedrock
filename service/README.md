@@ -1,9 +1,9 @@
 C# UDA-Hub as microservices
 
-This folder runs UDA-Hub as four services behind an API gateway, with Postgres. The approach follows
+This folder runs UDA-Hub as five services behind an API gateway, with Postgres. The approach follows
 [fastapi-langgraph-agent-production-ready-template](https://github.com/wassim249/fastapi-langgraph-agent-production-ready-template),
 but splits the system along the lines that already exist in the code: the CultPass system, ticket storage,
-the knowledge base, and the agents.
+the knowledge base, and the agents, plus an auth service for customer logins.
 
 The agents, prompts, routing rules and tools are the ones in `solution/agentic`, unchanged. Each data function
 in `agentic/tools` runs either locally against a database, as in the notebooks, or over HTTP against the
@@ -12,17 +12,21 @@ service that owns that data, depending on configuration (see [How the split work
 **Status:** the services, the Postgres paths, the migrations and the HTTP flow between the services are covered
 by `service/tests`, which CI also runs against Postgres 16. The images build and the whole stack, monitoring
 included, has been run with `docker compose`: migrations, seed, health checks, the gateway, Prometheus and
-Grafana, and Langfuse, which recorded a trace for each message sent through the gateway. That run used a
+Grafana, Langfuse, which recorded a trace for each message sent through the gateway, and customer sign-up and
+login, with the token deciding who the customer is. That run used a
 placeholder model key, so messages got the fallback reply; a run with real model credentials is still to do.
 
 ## Architecture
 
 ![UDA-Hub deployment as microservices](../solution/agentic/design/deployment.svg)
 
-The gateway is the only public entry point. The **agent service** runs the whole LangGraph workflow: its nodes are
+The gateway is the only public entry point. It accepts channel integrations with an API key and logged-in
+customers with a JWT access token, which the **auth service** issues after sign-up or login. The **agent service**
+runs the whole LangGraph workflow: its nodes are
 shown in the order they run, with the same names as in `solution/agentic/workflow.py` (the full workflow, with
 each node's role and routing conditions, is [`architecture.svg`](../solution/agentic/design/architecture.svg)).
-The tickets, cultpass and knowledge services only hold data, each in its own Postgres database.
+The tickets, cultpass and knowledge services only hold data, each in its own Postgres database, and the auth
+service holds the customer logins in its own.
 
 Each node is coloured by its agent type, the module in `agentic/agents` it comes from: gray `memory_agent`
 (`load_context`, `finalize`, `write_memory`), teal `classifier`, purple `supervisor` (`supervisor`,
@@ -33,21 +37,24 @@ containers (gateway, services, monitoring) and dark slate for the external model
 
 | Service | Owns | Does | Talks to |
 |---|---|---|---|
-| `gateway` | nothing | The only public endpoint (port 8080). Checks API keys, rate-limits each key, adds request ids, and returns only the reply and ticket status, never the agent's trace or internal notes | agent, tickets |
+| `gateway` | nothing | The only public endpoint (port 8080). Checks channel API keys or customer access tokens (JWT), keeps customers to their own tickets, rate-limits each caller, adds request ids, and returns only the reply and ticket status, never the agent's trace or internal notes | agent, tickets, auth |
 | `agent` | `agent_state` DB (LangGraph checkpoints) | Runs the LangGraph workflow for one customer message, with the agents from `solution/agentic/agents` (see [The agents in the agent service](#the-agents-in-the-agent-service)) | cultpass, tickets, knowledge, the chat model |
 | `cultpass` | `cultpass` DB | The CultPass system of record: customers, subscriptions, experiences, reservations, and their rules (quota, premium tier, blocked accounts, free slots) | nothing |
 | `tickets` | `tickets` DB | Tickets, messages, UDA-Hub users and long-term customer memory | nothing |
 | `knowledge` | `knowledge` DB | Knowledge-base articles and their embedding index; RAG search with the keyword fallback | the embedding model |
+| `auth` | `auth` DB | Customer sign-up (verified by a code sent to their CultPass email) and login; stores bcrypt password hashes and issues the access tokens the gateway checks (see [Customer logins](#customer-logins-jwt)) | cultpass |
 
 Supporting containers:
 
 | Container | Runs | Does |
 |---|---|---|
-| `db` | Always | Postgres 16: one database and one login role per service, created on first start |
-| `migrate` | Once per `up`, before the services | Brings the cultpass, tickets and knowledge databases to the latest schema ([Schema migrations](#schema-migrations)) |
+| `db` | Always | Postgres 16: one database and one login role per service |
+| `db-setup` | Once per `up`, before `migrate` | Creates any missing service database and login role (`postgres/init-databases.sh`) |
+| `migrate` | Once per `up`, before the services | Brings the cultpass, tickets, knowledge and auth databases to the latest schema ([Schema migrations](#schema-migrations)) |
 | `seed` | Once per `up`, after `migrate` | Loads the demo data into empty tables |
 | `prometheus` | `--profile monitoring` | Scrapes `/metrics` on every service every 15 seconds |
 | `grafana` | `--profile monitoring` | The UDA-Hub overview dashboard ([Monitoring](#monitoring)) |
+| `langfuse-web`, `langfuse-worker` and their stores | `--profile langfuse` | LLM tracing ([LLM tracing](#llm-tracing-langfuse)) |
 
 Each service has its **own database and its own Postgres role**, which can't connect to any other database.
 They share one Postgres server to keep the demo cheap; moving a database to its own server only changes a URL.
@@ -100,6 +107,7 @@ What the services add:
 | Metrics | `/metrics` on every service (request count and latency by route), plus what the agent did with each message (outcome, route, escalation team and priority, tools called); scraped by the optional Prometheus and shown in Grafana |
 | Schema changes | Alembic migrations, one history per database, applied by the `migrate` job before the services start |
 | Health | `/health` on every service checks its database; the gateway's `/ready` checks the services behind it |
+| Who the customer is | Channels (API key) pass the customer in the metadata, as before. For a logged-in customer the gateway sets it from their verified JWT and ignores identity fields in the metadata, so the agent runs exactly as it would for a channel, but with an identity that was proven ([Customer logins](#customer-logins-jwt)) |
 
 ## Running it
 
@@ -111,15 +119,16 @@ cp llm.env.example llm.env    # OpenAI key, or Bedrock / SageMaker settings
 docker compose up --build
 ```
 
-On first start, Postgres creates the four databases and roles (`postgres/init-databases.sh`). Then two
-one-shot jobs run, on every `up`:
+Three one-shot jobs run on every `up`:
 
-1. `migrate` brings the cultpass, tickets and knowledge databases to the latest schema
+1. `db-setup` creates any missing database and login role, one per service (`postgres/init-databases.sh`).
+   It only adds what is missing, so a database added later, like `auth`, also appears in an existing volume.
+2. `migrate` brings the cultpass, tickets, knowledge and auth databases to the latest schema
    (`scripts/migrate.py`, see [Schema migrations](#schema-migrations)).
-2. `seed` copies the committed demo data from the SQLite files into them (`scripts/seed.py`). It skips any
+3. `seed` copies the committed demo data from the SQLite files into them (`scripts/seed.py`). It skips any
    table that already has rows, so restarts never overwrite data.
 
-The services start only after both succeed. To reload the demo data:
+The services start only after they succeed. To reload the demo data:
 
 ```bash
 docker compose run --rm seed python -m service.scripts.seed --reset
@@ -143,6 +152,50 @@ curl -s localhost:8080/v1/tickets/T-100/messages -H 'X-API-Key: change-me-web-ch
 
 `status` is `resolved`, `awaiting_customer`, `escalated`, or `error` (the fallback reply was sent and the
 ticket was flagged for a human). The interactive API docs are at <http://localhost:8080/docs>.
+
+### Customer logins (JWT)
+
+Besides channel integrations with an API key, customers can log in and call the API themselves. Only CultPass
+customers can sign up, and only by proving they own their email:
+
+```bash
+# 1. Ask for a verification code. The answer is the same whether or not the email is a customer's.
+curl -s localhost:8080/v1/auth/register/start -H 'Content-Type: application/json' \
+  -d '{"email": "cathy.bloom@florals.org"}'
+
+# In this demo the code is written to the auth service's log instead of emailed:
+docker compose logs auth | grep 'Verification code'
+
+# 2. The code and a password (at least 10 characters, with a letter and a digit) create the login
+curl -s localhost:8080/v1/auth/register/complete -H 'Content-Type: application/json' \
+  -d '{"email": "cathy.bloom@florals.org", "code": "123456", "password": "Florals-2026-ok"}'
+
+# 3. Log in: {"access_token": "...", "token_type": "bearer", "expires_at": "..."}
+curl -s localhost:8080/v1/auth/login -H 'Content-Type: application/json' \
+  -d '{"email": "cathy.bloom@florals.org", "password": "Florals-2026-ok"}'
+
+# 4. Use the token instead of an API key
+curl -s localhost:8080/v1/tickets/T-200/messages -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' -d '{"text": "What are my reservations?"}'
+```
+
+How it works:
+
+- **Who the customer is comes from the token.** The gateway verifies the token itself (HS256 signature, issuer,
+  audience, type and expiry, in `common/tokens.py`) and sets the customer from it. Identity fields in the
+  message metadata (`email`, `external_user_id`, `user_name`, `account_id`) are ignored, so a customer can't
+  act as someone else by typing another email.
+- **Customers only see their own tickets.** Another customer's ticket, or a guest ticket a channel started,
+  answers `404` exactly like a missing one, so ticket ids can't be probed. Channels with an API key still see
+  every ticket.
+- **Sign-up is verified.** A 6-digit code goes to the CultPass email and expires after 10 minutes. It works
+  once, and five wrong guesses burn it. Only an HMAC of the code is stored. A new code can be asked for after
+  60 seconds.
+- **Passwords** are stored as bcrypt hashes. Five wrong passwords in a row lock the login for 15 minutes. A
+  wrong password, an unknown email and a locked login all get the same `401`, and take about as long.
+- **Tokens** last 60 minutes (`JWT_TTL_MINUTES`). There is no refresh token: the customer logs in again.
+- **Rate limits:** sign-up and login are limited per client IP (10 a minute), and each logged-in customer
+  has their own budget, like each API key.
 
 ### Monitoring
 
@@ -236,9 +289,16 @@ Other commands: `alembic -c service/alembic.ini -n <database> current | history 
 | `POST /v1/tickets/{ticket_id}/messages` | `{"text": "...", "metadata": {...}}`; metadata is optional: `email` or `external_user_id`, `channel`, `urgency`, `account_id` | `{ticket_id, reply, status, escalated_to}` |
 | `GET /v1/tickets/{ticket_id}` | | `{ticket_id, status, channel, issue_type}` |
 | `GET /v1/tickets/{ticket_id}/messages` | | The conversation as the customer saw it; system notes (escalation handoffs, refund requests) are left out |
+| `POST /v1/auth/register/start` | `{"email"}` | `202`, with the same message whether or not a code was sent |
+| `POST /v1/auth/register/complete` | `{"email", "code", "password"}` | `201` `{access_token, token_type, expires_at}`; `400` for a wrong or expired code |
+| `POST /v1/auth/login` | `{"email", "password"}` | `{access_token, token_type, expires_at}`; `401` otherwise |
 
-API callers are trusted channel integrations, not end customers: as in the original design, metadata such as
-the customer's email is taken as given.
+The ticket endpoints take either credential:
+
+- **`X-API-Key`** for channel integrations (web chat, email bridge). They are trusted: as in the original
+  design, metadata such as the customer's email is taken as given, and they can see every ticket.
+- **`Authorization: Bearer <access token>`** for logged-in customers. The customer comes from the token, and
+  they can only see and continue their own tickets (see [Customer logins](#customer-logins-jwt)).
 
 ## Tests
 
@@ -274,6 +334,13 @@ UDAHUB_TEST_POSTGRES_URL=postgresql+psycopg://postgres:<password>@localhost:5432
 | `UDAHUB_SERVICE_TIMEOUT` | agent | Seconds per internal call (default 15) |
 | Model settings (`llm.env`) | agent, knowledge | As in `solution/.env.example` |
 | `GRAFANA_ADMIN_PASSWORD` | grafana | Password of Grafana's `admin` user (default `admin`) |
+| `JWT_SECRET_KEY` | auth, gateway | Signs (auth) and verifies (gateway) customer access tokens; at least 32 characters. Without it the gateway accepts API keys only |
+| `JWT_TTL_MINUTES` | auth | How long an access token is valid (default 60) |
+| `GATEWAY_AUTH_RATE_LIMIT_PER_MINUTE` | gateway | Sign-up and login requests per client IP per minute (default 10) |
+| `AUTH_DB_URL` | auth, migrate | SQLAlchemy URL of the auth database |
+| `AUTH_DB_PASSWORD` | db, db-setup | Password of the auth database's login role |
+| `AUTH_CODE_TTL_MINUTES`, `AUTH_CODE_RESEND_SECONDS`, `AUTH_CODE_MAX_ATTEMPTS` | auth | Verification codes: lifetime (default 10), wait before a new one (60), wrong guesses allowed (5) |
+| `AUTH_MAX_FAILED_LOGINS`, `AUTH_LOCKOUT_MINUTES` | auth | Wrong passwords before the login locks (default 5), and for how long (15) |
 | `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY` | agent, langfuse-web | The Langfuse project's API keys (`pk-lf-…`, `sk-lf-…`), created on Langfuse's first start; tracing is off when they are empty |
 | `LANGFUSE_ADMIN_EMAIL`, `LANGFUSE_ADMIN_PASSWORD` | langfuse-web | The Langfuse login created on first start |
 | `LANGFUSE_NEXTAUTH_SECRET`, `LANGFUSE_SALT`, `LANGFUSE_ENCRYPTION_KEY` | langfuse-web, langfuse-worker | Langfuse's own secrets; the encryption key is 64 hex characters (`openssl rand -hex 32`) |
@@ -296,3 +363,9 @@ UDAHUB_TEST_POSTGRES_URL=postgresql+psycopg://postgres:<password>@localhost:5432
   a proxy that serves only `/v1`.
 - Service-to-service calls use one shared token over the private Docker network, not mTLS or per-service
   identities.
+- Verification codes are written to the auth service's log, not emailed (`deliver_code` in
+  `auth_service/main.py`). Before real use, send them with an email provider and stop logging them.
+- Customer tokens can't be revoked before they expire: there is no logout, refresh token or deny-list, and
+  there is no password reset yet. Keep `JWT_TTL_MINUTES` short.
+- The auth service and the gateway share one signing key (HS256). With RS256 or EdDSA, the gateway would hold
+  only a public key and could not create tokens.

@@ -31,7 +31,8 @@ the containers (gateway, services, monitoring) and dark slate for the external m
 
 ![UDA-Hub agent workflow](solution/agentic/design/architecture.svg)
 
-A ticket in natural language, plus optional metadata (customer, channel, urgency), goes through these nodes:
+A ticket in natural language, plus optional metadata (customer, channel, urgency), goes through these nodes. As
+microservices, a customer who logged in is identified by their access token instead of the metadata:
 
 | Node | Uses the LLM | What it does |
 |---|---|---|
@@ -59,7 +60,9 @@ The same workflow, with the same nodes, prompts, tools and rules, runs in two wa
 - **In process**, from the notebooks or `process_ticket()`, against the committed SQLite databases (`solution/`).
 - **As microservices** behind an API gateway, run with Docker Compose ([`service/`](service/README.md)). The
   whole workflow runs inside the agent service; the tickets, cultpass and knowledge services only hold data, each
-  in its own Postgres database. Prometheus and Grafana show traffic and support outcomes, and Langfuse
+  in its own Postgres database. Channel integrations call the gateway with an API key, and customers can sign
+  up and log in through the auth service: their JWT access token decides who they are, and they only see
+  their own tickets. Prometheus and Grafana show traffic and support outcomes, and Langfuse
   traces every model and tool call.
 
 ![UDA-Hub deployment as microservices](solution/agentic/design/deployment.svg)
@@ -73,7 +76,7 @@ request.
 | Path | Contents |
 |---|---|
 | `solution/` | The complete, working project, with its own guide in [`solution/README.md`](solution/README.md) |
-| `service/` | The same system as microservices (gateway, agent, CultPass, tickets, knowledge) with Postgres and Docker Compose, in [`service/README.md`](service/README.md) |
+| `service/` | The same system as microservices (gateway, agent, CultPass, tickets, knowledge, auth) with Postgres and Docker Compose, in [`service/README.md`](service/README.md) |
 | `requirements.txt` | Python dependencies |
 | `.github/workflows/tests.yml` | CI: runs the solution and service tests (with a Postgres 16 service) on pushes to `main` and on pull requests |
 
@@ -104,7 +107,7 @@ solution/
 |---|---|
 | [`report.md`](report.md) | Project report: architecture, results, the problems found in real-model testing and how each was fixed, lessons, and limitations |
 | [`solution/README.md`](solution/README.md) | Project guide: ticket flow, demo results, and where each requirement is met |
-| [`service/README.md`](service/README.md) | Microservices: architecture, how the split works, running with Docker Compose, monitoring with Grafana, LLM tracing with Langfuse, schema migrations, the public API, and limitations |
+| [`service/README.md`](service/README.md) | Microservices: architecture, how the split works, running with Docker Compose, customer logins (JWT), monitoring with Grafana, LLM tracing with Langfuse, schema migrations, the public API, and limitations |
 | [`evals/`](solution/evals/README.md) | Evaluation suite: running it, what is checked, and the case format |
 | [`agentic/design/`](solution/agentic/design/README.md) | Architecture, routing rules, resolve-or-escalate logic, memory, and safeguards |
 | [`agentic/agents/`](solution/agentic/agents/README.md) | Each agent node, the long-term memory rules, and how to add an agent |
@@ -170,6 +173,26 @@ A real-time endpoint is billed for every hour it exists, whether or not it is us
 ```bash
 python -m deploy.sagemaker_embeddings delete
 ```
+
+### Customer logins (microservices)
+
+When UDA-Hub runs as microservices, customers can call the API themselves instead of going through a channel
+integration. They sign up with their CultPass email, which they prove with a 6-digit code sent to it, choose a
+password, and log in to get a JWT access token:
+
+```bash
+curl -s localhost:8080/v1/auth/register/start -H 'Content-Type: application/json' -d '{"email": "cathy.bloom@florals.org"}'
+docker compose logs auth | grep 'Verification code'     # the demo logs the code instead of emailing it
+curl -s localhost:8080/v1/auth/register/complete -H 'Content-Type: application/json' \
+  -d '{"email": "cathy.bloom@florals.org", "code": "123456", "password": "Florals-2026-ok"}'
+curl -s localhost:8080/v1/auth/login -H 'Content-Type: application/json' \
+  -d '{"email": "cathy.bloom@florals.org", "password": "Florals-2026-ok"}'
+```
+
+They then send `Authorization: Bearer <token>` instead of `X-API-Key`. The token, not the message metadata, says
+who the customer is, and they can only see and continue their own tickets. Channel integrations keep using API
+keys. Passwords are stored as bcrypt hashes, and repeated failures lock the login. See
+[`service/README.md`](service/README.md#customer-logins-jwt) for the details and the limitations.
 
 ### Tracing with Langfuse (optional)
 
@@ -243,7 +266,8 @@ python -m evals.run
 - `tests/test_tracing.py` checks that Langfuse tracing is off without keys or without the package, and that when
   it is on each run gets its own handler, a session per ticket, and never the customer's email
 - `service/tests/` covers the microservices in one process: the service APIs, internal-token and API-key checks,
-  rate limiting, the full gateway → agent → services flow, the agent metrics, a service outage mid-turn, and the
+  customer sign-up, login, lockout and tokens (forged, expired, tampered), customers reaching only their own
+  tickets, rate limiting, the full gateway → agent → services flow, the agent metrics, a service outage mid-turn, and the
   Alembic migrations (that they match the models, downgrade cleanly, and adopt databases created before them)
 
 ## Demo Results
@@ -294,7 +318,7 @@ The model's wording varies from run to run, but the routes and outcomes above we
 | Error handling and edge cases | `process_ticket()` in [`workflow.py`](solution/agentic/workflow.py). Notebook 03's "Edge cases" cell covers an empty message, gibberish, an unknown customer, an unknown account and an LLM outage. |
 | Safeguards enforced in code | [Safeguards](solution/agentic/design/README.md#safeguards-the-llm-proposes-code-decides) |
 | Evaluation over repeated runs | [`solution/evals/`](solution/evals/README.md): 36 labelled tickets, scored in code and by an LLM judge |
-| Deployment as microservices | [`service/`](service/README.md): an API gateway and four services, Postgres, Alembic migrations, Docker Compose, Prometheus and Grafana |
+| Deployment as microservices | [`service/`](service/README.md): an API gateway and five services (including customer sign-up and login with JWTs), Postgres, Alembic migrations, Docker Compose, Prometheus and Grafana |
 
 ## Built With
 
@@ -304,7 +328,8 @@ The model's wording varies from run to run, but the routes and outcomes above we
 * [Amazon Bedrock](https://aws.amazon.com/bedrock/) and [Amazon SageMaker](https://aws.amazon.com/sagemaker/) - Claude and Titan embeddings, or an embedding endpoint
 * [SQLAlchemy](https://www.sqlalchemy.org/) - Core (`udahub.db`) and external (`cultpass.db`) databases
 * [NumPy](https://numpy.org/) - Cosine similarity for embedding search
-* [FastAPI](https://fastapi.tiangolo.com/) - The gateway and the four services
+* [FastAPI](https://fastapi.tiangolo.com/) - The gateway and the five services
+* [PyJWT](https://pyjwt.readthedocs.io/) and [bcrypt](https://pypi.org/project/bcrypt/) - Customer access tokens and password hashing
 * [PostgreSQL](https://www.postgresql.org/) and [Alembic](https://alembic.sqlalchemy.org/) - Service databases, LangGraph checkpoints and schema migrations
 * [Docker Compose](https://docs.docker.com/compose/) - Running the services together
 * [Prometheus](https://prometheus.io/) and [Grafana](https://grafana.com/) - Metrics and the UDA-Hub dashboard

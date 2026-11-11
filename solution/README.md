@@ -24,7 +24,7 @@ the customer, yellow is tools and data, and dashed arrows are conditional routes
 | Node | What it does |
 |---|---|
 | `classifier` | Gives the ticket a structured classification: issue type, urgency, sentiment, language, whether account action is needed, and confidence |
-| `supervisor` | Identifies the customer (from metadata or an email in the conversation) and routes the ticket with deterministic rules. It escalates before `knowledge_agent` or `account_agent` runs when the customer asks for a human, the issue is legal or critical, the classifier isn't confident, a blocked customer has an account issue, or the customer reports a problem they reported before |
+| `supervisor` | Identifies the customer (from metadata or an email in the conversation; as microservices, a logged-in customer is already identified by their access token) and routes the ticket with deterministic rules. It escalates before `knowledge_agent` or `account_agent` runs when the customer asks for a human, the issue is legal or critical, the classifier isn't confident, a blocked customer has an account issue, or the customer reports a problem they reported before |
 | `knowledge_agent` | Answers how-to and policy questions with RAG over the 18 knowledge base articles |
 | `account_agent` | A ReAct agent (LangChain `create_agent`) with CultPass tools bound to the current customer: account, reservations, booking, cancellation, subscription changes and refund requests. Booking and cancellation only accept ids that a lookup returned in the same turn |
 | `quality_gate` | Scores the draft reply for confidence and checks that it is backed by the articles or tool results. It escalates on low confidence (< 0.7), an unsupported draft, or a policy that needs a human (such as a refund) |
@@ -56,6 +56,11 @@ with `docker compose --profile langfuse up` from `service/`, then add `LANGFUSE_
 (both from `service/.env`) and `LANGFUSE_BASE_URL=http://localhost:3001` to `.env`. The notebook demos and
 `chat_interface` are then traced on <http://localhost:3001>. Without these keys, tracing is off. See the
 [root README](../README.md#tracing-with-langfuse-optional).
+
+The notebooks have no login: they call `process_ticket()` directly, and the customer comes from the metadata or
+an email given in the chat. Customer sign-up and login (JWT access tokens) exist only when UDA-Hub runs as
+microservices; see the [root README](../README.md#customer-logins-microservices) and
+[`service/README.md`](../service/README.md#customer-logins-jwt).
 
 The demos make real changes: bookings and cancellations, plus new tickets and memories. To reset the data, re-run:
 

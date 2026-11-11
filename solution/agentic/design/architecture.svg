@@ -19,8 +19,8 @@
 <text x="970" y="67" class="sh">calls the LLM</text>
 <rect x="40" y="100" width="230" height="76" rx="10" fill="#e8f6ee" stroke="#2e8b57" stroke-width="1.6"/>
 <text x="155.0" y="127.0" class="t">Incoming ticket</text>
-<text x="155.0" y="145.0" class="s">message + metadata</text>
-<text x="155.0" y="161.0" class="s">customer · channel · urgency</text>
+<text x="155.0" y="145.0" class="s">message + channel, urgency</text>
+<text x="155.0" y="161.0" class="s">customer: login token or metadata</text>
 <path d="M270 138 H476" fill="none" stroke="#4a5568" stroke-width="1.6" marker-end="url(#arrow)"/>
 <rect x="480" y="105" width="240" height="64" rx="10" fill="#eef1f5" stroke="#5b6779" stroke-width="1.6"/>
 <text x="600.0" y="126.0" class="t">load_context</text>
