@@ -35,6 +35,7 @@ services:
       TICKETS_DB_PASSWORD: ${TICKETS_DB_PASSWORD:?}
       KNOWLEDGE_DB_PASSWORD: ${KNOWLEDGE_DB_PASSWORD:?}
       AGENT_STATE_DB_PASSWORD: ${AGENT_STATE_DB_PASSWORD:?}
+      AUTH_DB_PASSWORD: ${AUTH_DB_PASSWORD:?set AUTH_DB_PASSWORD in service/.env}
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./postgres/init-databases.sh:/docker-entrypoint-initdb.d/init-databases.sh:ro
@@ -43,6 +44,27 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    networks: [internal]
+
+  # One-shot job: creates any missing service database and login role (the init script only runs when the
+  # volume is first created, so this is how a database added later reaches an existing volume)
+  db-setup:
+    image: postgres:16-alpine
+    restart: "no"
+    entrypoint: ["bash", "/init-databases.sh"]
+    environment:
+      PGHOST: db
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_USER: postgres
+      CULTPASS_DB_PASSWORD: ${CULTPASS_DB_PASSWORD}
+      TICKETS_DB_PASSWORD: ${TICKETS_DB_PASSWORD}
+      KNOWLEDGE_DB_PASSWORD: ${KNOWLEDGE_DB_PASSWORD}
+      AGENT_STATE_DB_PASSWORD: ${AGENT_STATE_DB_PASSWORD}
+      AUTH_DB_PASSWORD: ${AUTH_DB_PASSWORD}
+    volumes:
+      - ./postgres/init-databases.sh:/init-databases.sh:ro
+    depends_on:
+      db: {condition: service_healthy}
     networks: [internal]
 
   # One-shot job: brings every service database to the latest schema (Alembic, service/migrations)
@@ -54,8 +76,9 @@ services:
       CULTPASS_DB_URL: postgresql+psycopg://cultpass_svc:${CULTPASS_DB_PASSWORD}@db:5432/cultpass
       TICKETS_DB_URL: postgresql+psycopg://tickets_svc:${TICKETS_DB_PASSWORD}@db:5432/tickets
       KNOWLEDGE_DB_URL: postgresql+psycopg://knowledge_svc:${KNOWLEDGE_DB_PASSWORD}@db:5432/knowledge
+      AUTH_DB_URL: postgresql+psycopg://auth_svc:${AUTH_DB_PASSWORD}@db:5432/auth
     depends_on:
-      db: {condition: service_healthy}
+      db-setup: {condition: service_completed_successfully}
 
   # One-shot job: loads the demo data into empty tables
   seed:
@@ -98,6 +121,21 @@ services:
     depends_on:
       seed: {condition: service_completed_successfully}
 
+  # Customer sign-up and login: issues the JWTs the gateway verifies
+  auth:
+    <<: *backend
+    command: ["uvicorn", "service.auth_service.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    environment:
+      <<: *common-env
+      AUTH_DB_URL: postgresql+psycopg://auth_svc:${AUTH_DB_PASSWORD}@db:5432/auth
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:?set JWT_SECRET_KEY in service/.env (at least 32 characters)}
+      JWT_TTL_MINUTES: ${JWT_TTL_MINUTES:-60}
+      CULTPASS_SERVICE_URL: http://cultpass:8000
+    healthcheck: *healthcheck
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+      cultpass: {condition: service_healthy}
+
   agent:
     <<: *backend
     command: ["uvicorn", "service.agent_service.main:app", "--host", "0.0.0.0", "--port", "8000"]
@@ -133,13 +171,17 @@ services:
       <<: *common-env
       GATEWAY_API_KEYS: ${GATEWAY_API_KEYS:?set GATEWAY_API_KEYS in service/.env}
       GATEWAY_RATE_LIMIT_PER_MINUTE: ${GATEWAY_RATE_LIMIT_PER_MINUTE:-30}
+      GATEWAY_AUTH_RATE_LIMIT_PER_MINUTE: ${GATEWAY_AUTH_RATE_LIMIT_PER_MINUTE:-10}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:?set JWT_SECRET_KEY in service/.env (at least 32 characters)}
       AGENT_SERVICE_URL: http://agent:8000
       TICKET_SERVICE_URL: http://tickets:8000
+      AUTH_SERVICE_URL: http://auth:8000
     ports:
       - "${GATEWAY_PORT:-8080}:8000"
     healthcheck: *healthcheck
     depends_on:
       agent: {condition: service_healthy}
+      auth: {condition: service_healthy}
     networks: [internal]
 
   prometheus:

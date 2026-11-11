@@ -61,11 +61,12 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--reset", action="store_true", help="empty the tables and reload the demo data")
     args = parser.parse_args(argv)
-    missing = [db.url_env for db in DATABASES.values() if not os.getenv(db.url_env)]
+    seeded = {name: db for name, db in DATABASES.items() if db.seeded}
+    missing = [db.url_env for db in seeded.values() if not os.getenv(db.url_env)]
     if missing:
         logger.error("Set %s", ", ".join(missing))
         return 1
-    for name, db in DATABASES.items():
+    for name, db in seeded.items():
         try:
             result = seed(name, os.environ[db.url_env], reset=args.reset)
         except RuntimeError as exc:

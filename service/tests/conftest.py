@@ -21,6 +21,7 @@ from agentic.remote import http  # noqa: E402
 import agentic.tools.knowledge_tools as kt  # noqa: E402
 
 TOKEN = "test-internal-token"
+JWT_SECRET = "test-jwt-secret-that-is-long-enough-for-hs256"
 
 
 @pytest.fixture(autouse=True)
@@ -33,6 +34,7 @@ def databases(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "EVENT_LOG_PATH", tmp_path / "events.jsonl")
     monkeypatch.setenv("INTERNAL_API_TOKEN", TOKEN)
     monkeypatch.setattr(config, "INTERNAL_API_TOKEN", TOKEN)
+    monkeypatch.setenv("JWT_SECRET_KEY", JWT_SECRET)
     # Offline: keyword retrieval instead of embeddings
     monkeypatch.setattr(kt, "get_embeddings", lambda: (_ for _ in ()).throw(RuntimeError("offline")))
     kt._retrievers.clear()
@@ -58,6 +60,30 @@ def knowledge_client():
     from service.knowledge_service.main import app
     with TestClient(app, headers={"X-Internal-Token": TOKEN}) as client:
         yield client
+
+
+@pytest.fixture
+def codes(monkeypatch):
+    """Verification codes the auth service 'emails', by address."""
+    from service.auth_service import main
+    sent = {}
+    monkeypatch.setattr(main, "deliver_code", lambda email, code: sent.__setitem__(email, code))
+    return sent
+
+
+@pytest.fixture
+def auth_client(tmp_path, monkeypatch, codes):
+    """The auth service on a fresh SQLite database, brought to the latest schema by its migrations."""
+    from service.auth_service import main
+    from service.migrations.common import upgrade
+    url = f"sqlite:///{tmp_path / 'auth.db'}"
+    upgrade("auth", url)
+    monkeypatch.setenv("AUTH_DB_URL", url)
+    main.engine.cache_clear()
+    with TestClient(main.app, headers={"X-Internal-Token": TOKEN}) as client:
+        yield client
+    main.engine().dispose()
+    main.engine.cache_clear()
 
 
 @pytest.fixture

@@ -4,8 +4,8 @@
     python -m service.scripts.migrate tickets          # just one
     python -m service.scripts.migrate tickets 0001     # to a specific revision (upgrade only)
 
-Databases: cultpass (CULTPASS_DB_URL), tickets (TICKETS_DB_URL), knowledge (KNOWLEDGE_DB_URL). The compose
-`migrate` job runs this before `seed`. To create a revision or to downgrade, use the alembic CLI with
+Databases: cultpass (CULTPASS_DB_URL), tickets (TICKETS_DB_URL), knowledge (KNOWLEDGE_DB_URL), auth
+(AUTH_DB_URL). The compose `migrate` job runs this before `seed`. To create a revision or to downgrade, use the alembic CLI with
 service/alembic.ini (see that file).
 """
 import argparse

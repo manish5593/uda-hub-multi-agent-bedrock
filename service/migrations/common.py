@@ -6,6 +6,7 @@ migrations/<name>/versions and its own section in service/alembic.ini:
     cultpass   CULTPASS_DB_URL   the CultPass tables
     tickets    TICKETS_DB_URL    accounts, users, tickets, messages, customer memory
     knowledge  KNOWLEDGE_DB_URL  accounts, knowledge articles
+    auth       AUTH_DB_URL       customer logins and pending verification codes (not seeded)
 
 The tickets and knowledge databases are both built from the udahub models, so each history only sees its
 own tables. The agent's checkpoint database is not here: LangGraph's PostgresSaver.setup() manages it.
@@ -25,6 +26,7 @@ from alembic.config import Config  # noqa: E402
 from sqlalchemy import MetaData, create_engine, inspect, pool  # noqa: E402
 
 from data.models import cultpass, udahub  # noqa: E402
+from service.auth_service import models as auth  # noqa: E402
 
 ALEMBIC_INI = ROOT / "service" / "alembic.ini"
 # The first revision of every history: the schema as seed.py used to create it with create_all()
@@ -40,6 +42,8 @@ class Database:
     url_env: str
     metadata: MetaData
     tables: tuple
+    # Loaded with the demo data by service.scripts.seed
+    seeded: bool = True
 
     def includes(self, table_name: str) -> bool:
         return table_name in self.tables
@@ -51,6 +55,7 @@ DATABASES = {
     "tickets": Database("tickets", "TICKETS_DB_URL", udahub.Base.metadata,
                         ("accounts", "users", "tickets", "ticket_metadata", "ticket_messages", "customer_memory")),
     "knowledge": Database("knowledge", "KNOWLEDGE_DB_URL", udahub.Base.metadata, ("accounts", "knowledge")),
+    "auth": Database("auth", "AUTH_DB_URL", auth.Base.metadata, tuple(auth.Base.metadata.tables), seeded=False),
 }
 
 

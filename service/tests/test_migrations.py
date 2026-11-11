@@ -19,6 +19,7 @@ from service.scripts import seed
 
 POSTGRES_ADMIN_URL = os.getenv("UDAHUB_TEST_POSTGRES_URL")
 NAMES = sorted(DATABASES)
+SEEDED = sorted(name for name, db in DATABASES.items() if db.seeded)
 
 
 @pytest.fixture(params=["sqlite", "postgres"])
@@ -138,7 +139,7 @@ def test_seed_needs_the_migrations_first(new_db):
         seed.seed("cultpass", new_db())
 
 
-@pytest.mark.parametrize("name", NAMES)
+@pytest.mark.parametrize("name", SEEDED)
 def test_seed_loads_the_demo_data_once(new_db, name):
     url = new_db()
     upgrade(name, url)

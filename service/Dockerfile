@@ -1,4 +1,4 @@
-# Backend image: CultPass, Ticket, Knowledge and Agent services, and the migrate and seed jobs.
+# Backend image: CultPass, Ticket, Knowledge, Auth and Agent services, and the migrate and seed jobs.
 # One image, different commands (see docker-compose.yml). Build context: the repository root.
 FROM python:3.11-slim
 
@@ -22,6 +22,7 @@ COPY service/cultpass_service service/cultpass_service
 COPY service/ticket_service service/ticket_service
 COPY service/knowledge_service service/knowledge_service
 COPY service/agent_service service/agent_service
+COPY service/auth_service service/auth_service
 COPY service/scripts service/scripts
 COPY service/migrations service/migrations
 COPY service/alembic.ini service/alembic.ini

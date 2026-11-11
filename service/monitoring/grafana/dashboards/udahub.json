@@ -44,7 +44,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Services Prometheus can scrape, out of 5 (gateway, agent, cultpass, tickets, knowledge).",
+      "description": "Services Prometheus can scrape, out of 6 (gateway, agent, cultpass, tickets, knowledge, auth).",
       "gridPos": {
         "h": 4,
         "w": 4,
@@ -76,11 +76,11 @@
               },
               {
                 "color": "orange",
-                "value": 4
+                "value": 5
               },
               {
                 "color": "green",
-                "value": 5
+                "value": 6
               }
             ]
           },

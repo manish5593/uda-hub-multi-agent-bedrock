@@ -65,13 +65,13 @@ def agent_client(remote_services, llm, monkeypatch):
 
 
 @pytest.fixture
-def gateway(agent_client, ticket_client, monkeypatch):
+def gateway(agent_client, ticket_client, auth_client, monkeypatch):
     """The gateway, with its upstream calls routed to the in-process services."""
     from service.gateway import main
     monkeypatch.setenv("GATEWAY_API_KEYS", f"other-key, {API_KEY}")
     monkeypatch.setenv("GATEWAY_RATE_LIMIT_PER_MINUTE", "5")
     main.limiter.hits.clear()
-    apps = {"agent": agent_client.app, "tickets": ticket_client.app}
+    apps = {"agent": agent_client.app, "tickets": ticket_client.app, "auth": auth_client.app}
     monkeypatch.setattr(main, "make_client", lambda name: httpx.AsyncClient(
         transport=httpx.ASGITransport(app=apps[name]), base_url=f"http://{name}"))
     with TestClient(main.app, headers={"X-API-Key": API_KEY}) as client:
@@ -211,4 +211,107 @@ def test_gateway_rate_limits_each_key(gateway):
 
 
 def test_gateway_readiness(gateway):
-    assert gateway.get("/ready").json() == {"ready": True, "services": {"agent": True, "tickets": True}}
+    assert gateway.get("/ready").json() == {"ready": True,
+                                            "services": {"agent": True, "tickets": True, "auth": True}}
+
+
+# --- Customer logins through the gateway ------------------------------------------------------------
+
+BOB, CATHY = "bob.stone@granite.com", "cathy.bloom@florals.org"
+
+
+def customer_token(gateway, codes, email, password="a-good-password-1"):
+    """Sign up through the gateway (as a customer: no API key) and return the Authorization header."""
+    api_key = gateway.headers.pop("X-API-Key", None)
+    assert gateway.post("/v1/auth/register/start", json={"email": email}).status_code == 202
+    created = gateway.post("/v1/auth/register/complete",
+                           json={"email": email, "code": codes[email], "password": password})
+    assert created.status_code == 201, created.text
+    login = gateway.post("/v1/auth/login", json={"email": email, "password": password})
+    assert login.status_code == 200
+    if api_key:
+        gateway.headers["X-API-Key"] = api_key
+    return {"Authorization": f"Bearer {login.json()['access_token']}"}
+
+
+def test_a_logged_in_customer_is_identified_by_their_token(gateway, llm, codes):
+    bob = customer_token(gateway, codes, BOB)
+    gateway.headers.pop("X-API-Key")
+    # Metadata claiming to be someone else is ignored: the token decides who this is
+    reply = gateway.post("/v1/tickets/t-bob/messages", headers=bob,
+                         json={"text": "Hi", "metadata": {"email": CATHY, "external_user_id": "x"}})
+    assert reply.status_code == 200
+    ticket = ticket_tools.get_ticket("t-bob")
+    assert ticket["user_name"] == "Bob Stone" and ticket["external_user_id"] != "x"
+
+    assert gateway.get("/v1/tickets/t-bob", headers=bob).status_code == 200
+    assert [m["role"] for m in gateway.get("/v1/tickets/t-bob/messages", headers=bob).json()] == ["user", "ai"]
+    # And the conversation continues on the same ticket
+    assert gateway.post("/v1/tickets/t-bob/messages", headers=bob, json={"text": "Thanks"}).status_code == 200
+
+
+def test_customers_only_see_their_own_tickets(gateway, llm, codes):
+    bob = customer_token(gateway, codes, BOB)
+    cathy = customer_token(gateway, codes, CATHY)
+    gateway.headers.pop("X-API-Key")
+    gateway.post("/v1/tickets/t-bob/messages", headers=bob, json={"text": "Hi"})
+
+    # Someone else's ticket looks exactly like a missing one
+    for request in (lambda: gateway.get("/v1/tickets/t-bob", headers=cathy),
+                    lambda: gateway.get("/v1/tickets/t-bob/messages", headers=cathy),
+                    lambda: gateway.post("/v1/tickets/t-bob/messages", headers=cathy, json={"text": "From Cathy"})):
+        response = request()
+        assert response.status_code == 404 and response.json() == {"detail": "Ticket not found"}
+    assert all(m["content"] != "From Cathy" for m in ticket_tools.get_ticket_messages("t-bob"))
+
+
+def test_a_customer_cannot_take_over_a_channel_ticket(gateway, llm, codes):
+    # A guest conversation started by a channel integration
+    gateway.post("/v1/tickets/t-guest/messages", json={"text": "Hi"})
+    bob = customer_token(gateway, codes, BOB)
+    gateway.headers.pop("X-API-Key")
+    assert gateway.get("/v1/tickets/t-guest", headers=bob).status_code == 404
+    assert gateway.post("/v1/tickets/t-guest/messages", headers=bob, json={"text": "Hi"}).status_code == 404
+
+
+def test_api_keys_still_work_for_customer_tickets(gateway, llm, codes):
+    bob = customer_token(gateway, codes, BOB)
+    gateway.post("/v1/tickets/t-bob/messages", headers={**bob, "X-API-Key": ""}, json={"text": "Hi"})
+    # A trusted channel integration sees every ticket
+    assert gateway.get("/v1/tickets/t-bob").status_code == 200
+
+
+@pytest.mark.parametrize("token", ["not-a-jwt", "a.b.c"])
+def test_gateway_rejects_bad_tokens(gateway, token):
+    gateway.headers.pop("X-API-Key")
+    response = gateway.get("/v1/tickets/t-1", headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 401 and response.headers["WWW-Authenticate"] == "Bearer"
+
+
+def test_gateway_rejects_an_expired_token(gateway, codes, monkeypatch):
+    monkeypatch.setenv("JWT_TTL_MINUTES", "-1")
+    bob = customer_token(gateway, codes, BOB)
+    gateway.headers.pop("X-API-Key")
+    assert gateway.get("/v1/tickets/t-1", headers=bob).status_code == 401
+
+
+def test_gateway_relays_login_failures(gateway, codes):
+    customer_token(gateway, codes, BOB)
+    gateway.headers.pop("X-API-Key")
+    response = gateway.post("/v1/auth/login", json={"email": BOB, "password": "wrong-password-1"})
+    assert response.status_code == 401 and "Incorrect email or password" in response.json()["detail"]
+    weak = gateway.post("/v1/auth/register/complete", json={"email": CATHY, "code": "123456", "password": "short"})
+    assert weak.status_code == 422
+
+
+def test_sign_up_and_login_are_rate_limited_per_client(gateway, monkeypatch):
+    monkeypatch.setenv("GATEWAY_AUTH_RATE_LIMIT_PER_MINUTE", "3")
+    statuses = [gateway.post("/v1/auth/login", json={"email": BOB, "password": "x"}).status_code for _ in range(4)]
+    assert statuses == [401] * 3 + [429]
+
+
+def test_customers_are_rate_limited_separately(gateway, llm, codes):
+    bob = customer_token(gateway, codes, BOB)
+    gateway.headers.pop("X-API-Key")
+    statuses = [gateway.get("/v1/tickets/missing", headers=bob).status_code for _ in range(6)]
+    assert statuses == [404] * 5 + [429]
