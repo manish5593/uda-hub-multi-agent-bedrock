@@ -80,9 +80,12 @@
 <text x="1100.0" y="377.0" class="t" style="fill:#ffffff">Embeddings</text>
 <text x="1100.0" y="395.0" class="s" style="fill:#ffffff">OpenAI, Bedrock</text>
 <text x="1100.0" y="411.0" class="s" style="fill:#ffffff">or SageMaker</text>
-<path d="M240 158 H316" fill="none" stroke="#4a5568" stroke-width="1.6" marker-end="url(#arrow)"/>
-<text x="278" y="150" class="l" text-anchor="middle">X-API-Key</text>
-<path d="M510 158 H536" fill="none" stroke="#4a5568" stroke-width="1.6" marker-end="url(#arrow)"/>
+<path d="M240 148 H316" fill="none" stroke="#4a5568" stroke-width="1.6" marker-end="url(#arrow)"/>
+<text x="268" y="140" class="l" text-anchor="middle">X-API-Key</text>
+<path d="M320 176 H244" fill="none" stroke="#4a5568" stroke-width="1.6" marker-end="url(#arrow)"/>
+<text x="268" y="192" class="l" text-anchor="middle">reply</text>
+<path d="M510 148 H536" fill="none" stroke="#4a5568" stroke-width="1.6" marker-end="url(#arrow)"/>
+<path d="M540 176 H514" fill="none" stroke="#4a5568" stroke-width="1.6" marker-end="url(#arrow)"/>
 <path d="M990 158 H1024" fill="none" stroke="#4a5568" stroke-width="1.6" marker-end="url(#arrow)"/>
 <rect x="318" y="350" width="155" height="76" rx="10" fill="#fdeefd" stroke="#c026d3" stroke-width="1.6"/>
 <text x="395.5" y="377.0" class="t">tickets service</text>
