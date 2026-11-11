@@ -1,21 +1,30 @@
 ---
 config:
+  theme: base
+  themeVariables:
+    primaryTextColor: "#1a202c"
+    secondaryTextColor: "#1a202c"
+    tertiaryTextColor: "#1a202c"
+    textColor: "#1a202c"
+    nodeTextColor: "#1a202c"
+    lineColor: "#718096"
+    fontSize: "15px"
   flowchart:
     curve: linear
 ---
 graph TD;
 	__start__([<p>__start__</p>]):::first
 	load_context(load_context)
-	classifier(classifier)
+	classifier("classifier<br/><b style='color:#e53e3e'>LLM</b>")
 	supervisor(supervisor)
-	knowledge_agent(knowledge_agent)
-	account_agent(account_agent)
-	quality_gate(quality_gate)
+	knowledge_agent("knowledge_agent<br/><b style='color:#e53e3e'>LLM</b>")
+	account_agent("account_agent<br/><b style='color:#e53e3e'>LLM</b>")
+	quality_gate("quality_gate<br/><b style='color:#e53e3e'>LLM</b>")
 	approve(approve)
-	escalation_agent(escalation_agent)
+	escalation_agent("escalation_agent<br/><b style='color:#e53e3e'>LLM</b>")
 	request_info(request_info)
 	finalize(finalize)
-	write_memory(write_memory)
+	write_memory("write_memory<br/><b style='color:#e53e3e'>LLM</b>")
 	__end__([<p>__end__</p>]):::last
 	__start__ --> load_context;
 	account_agent --> quality_gate;
@@ -33,11 +42,21 @@ graph TD;
 	supervisor -.-> knowledge_agent;
 	supervisor -.-> request_info;
 	write_memory --> __end__;
-	classDef default fill:#2d3748,stroke:#a0aec0,stroke-width:1.5px,color:#f7fafc,line-height:1.2
-	classDef first fill:#1f4d36,stroke:#6fcf97,stroke-width:1.5px,color:#f7fafc
-	classDef last fill:#1f4d36,stroke:#6fcf97,stroke-width:1.5px,color:#f7fafc
-	classDef llm fill:#3b2f6b,stroke:#a58cff,stroke-width:1.5px,color:#f7fafc
-	classDef escalation fill:#6b2a24,stroke:#f08a7e,stroke-width:1.5px,color:#f7fafc
-	class classifier,knowledge_agent,account_agent,quality_gate,write_memory llm
-	class escalation_agent escalation
-	linkStyle default stroke:#a0aec0,stroke-width:1.5px
+	classDef default fill:#eef1f5,stroke:#5b6779,stroke-width:2px,color:#1a202c,font-weight:bold,font-size:15px,line-height:1.2
+	classDef first fill:#e8f6ee,stroke:#2e8b57,stroke-width:2px,color:#1a202c,font-weight:bold,font-size:15px
+	classDef last fill:#e8f6ee,stroke:#2e8b57,stroke-width:2px,color:#1a202c,font-weight:bold,font-size:15px
+	classDef memory_agent fill:#eef1f5,stroke:#5b6779,stroke-width:2px,color:#1a202c,font-weight:bold,font-size:15px
+	classDef classifier fill:#e6f7f5,stroke:#2c7a7b,stroke-width:2px,color:#1a202c,font-weight:bold,font-size:15px
+	classDef supervisor fill:#efeafe,stroke:#6d4fd8,stroke-width:2px,color:#1a202c,font-weight:bold,font-size:15px
+	classDef knowledge_agent fill:#e6f0fb,stroke:#2b6cb0,stroke-width:2px,color:#1a202c,font-weight:bold,font-size:15px
+	classDef account_agent fill:#f5ebe3,stroke:#8b5a3c,stroke-width:2px,color:#1a202c,font-weight:bold,font-size:15px
+	classDef quality_gate fill:#ffe8d6,stroke:#c05621,stroke-width:2px,color:#1a202c,font-weight:bold,font-size:15px
+	classDef escalation_agent fill:#fdecea,stroke:#c0392b,stroke-width:2px,color:#1a202c,font-weight:bold,font-size:15px
+	class load_context,finalize,write_memory memory_agent
+	class classifier classifier
+	class supervisor,request_info supervisor
+	class knowledge_agent knowledge_agent
+	class account_agent account_agent
+	class quality_gate,approve quality_gate
+	class escalation_agent escalation_agent
+	linkStyle default stroke:#718096,stroke-width:2.5px
