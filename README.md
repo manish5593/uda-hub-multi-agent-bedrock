@@ -12,30 +12,47 @@ UDA-Hub is an intelligent, multi-agent decision suite that resolves customer sup
 platforms it serves. It is built with LangGraph. The first integrated account is **CultPass**, a
 subscription for cultural experiences.
 
-A ticket in natural language, plus optional metadata (customer, channel, urgency), goes through these agents:
+## Architecture
 
-- **Classifier**: issue type, urgency, sentiment, language and confidence
-- **Supervisor**: identifies the customer and routes the ticket with auditable rules. Human requests, legal or critical issues,
-  blocked accounts and repeat problems go straight to a human
-- **Knowledge agent**: answers from the knowledge base with RAG
-- **Account agent**: uses CultPass tools (reservations, subscription, refund requests) scoped to the customer, which only accept ids it looked up
-- **Quality gate**: approves the answer or escalates it, based on confidence, grounding and policy
-- **Escalation agent**: hands off to the right human team with a summary
-- **Memory**: short-term (the session's conversation, via the checkpointer) and long-term (preferences,
-  reported issues and past tickets, in `udahub.db`). Long-term memory is built only from the customer's own
-  messages, with filters that keep stale, one-off and personal details out
+Two diagrams describe the system, and both use the node names from the code
+([`solution/agentic/workflow.py`](solution/agentic/workflow.py)):
+
+1. **The agent workflow**: what happens to one customer message.
+2. **The deployment**: where that workflow runs when it is deployed as microservices.
+
+### 1. The agent workflow
+
+![UDA-Hub agent workflow](solution/agentic/design/architecture.svg)
+
+A ticket in natural language, plus optional metadata (customer, channel, urgency), goes through these nodes:
+
+| Node | Uses the LLM | What it does |
+|---|---|---|
+| `load_context` | No | Finds or creates the ticket, identifies the customer, and recalls long-term memory |
+| `classifier` | Yes | Issue type, urgency, sentiment, language and confidence |
+| `supervisor` | No | Identifies the customer and routes the ticket with auditable rules. Human requests, legal or critical issues, blocked accounts and repeat problems go straight to `escalation_agent` |
+| `knowledge_agent` | Yes | Answers from the knowledge base with RAG |
+| `account_agent` | Yes | Uses CultPass tools (reservations, subscription, refund requests) scoped to the customer, which only accept ids it looked up |
+| `request_info` | Only to translate | Asks a guest for their email when an account action is needed |
+| `quality_gate` | Yes | Checks the draft's confidence and grounding; code then sends it (`approve`) or escalates it |
+| `escalation_agent` | Yes | Hands off to the right human team with a summary |
+| `finalize` | No | Sends the reply and sets the ticket's status |
+| `write_memory` | Yes | Saves lasting facts from the customer's own messages, with filters that keep stale, one-off and personal details out |
+
+Short-term memory is the conversation per ticket (the LangGraph checkpointer). Long-term memory is the customer's
+preferences, reported issues and past tickets, in `udahub.db`.
 
 Business rules and policies are enforced in code, not left to prompts: the LLM proposes, and code decides. See
 [Safeguards](solution/agentic/design/README.md#safeguards-the-llm-proposes-code-decides).
 
-![UDA-Hub architecture](solution/agentic/design/architecture.svg)
+### 2. The deployment
 
-The same agents run in two ways:
+The same workflow, with the same nodes, prompts, tools and rules, runs in two ways:
 
 - **In process**, from the notebooks or `process_ticket()`, against the committed SQLite databases (`solution/`).
-- **As microservices** behind an API gateway, each service with its own Postgres database, run with Docker
-  Compose. This version adds Alembic migrations, and Prometheus metrics with a Grafana dashboard
-  ([`service/`](service/README.md)).
+- **As microservices** behind an API gateway, run with Docker Compose ([`service/`](service/README.md)). The
+  whole workflow runs inside the agent service; the tickets, cultpass and knowledge services only hold data, each
+  in its own Postgres database. Prometheus and Grafana show traffic and support outcomes.
 
 ![UDA-Hub deployment as microservices](solution/agentic/design/deployment.svg)
 

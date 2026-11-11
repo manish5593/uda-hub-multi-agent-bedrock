@@ -19,59 +19,6 @@ credentials is still to do.
 
 ![UDA-Hub deployment as microservices](../solution/agentic/design/deployment.svg)
 
-The same, as a Mermaid diagram:
-
-```mermaid
-%%{init: {"theme": "base", "themeVariables": {"fontSize": "15px", "background": "#0f172a", "lineColor": "#94a3b8", "textColor": "#ffffff", "primaryTextColor": "#ffffff", "edgeLabelBackground": "#1e293b", "tertiaryTextColor": "#ffffff"}}}%%
-graph LR
-    C([Channel integration<br/>web chat, email bridge]) -->|X-API-Key| GW
-    subgraph SVC [services on the internal network]
-        GW[gateway<br/>API keys, rate limit]
-        AG[agent service · LangGraph workflow<br/>classifier, supervisor,<br/>knowledge_agent, account_agent,<br/>escalation_agent, quality_gate,<br/>load_context, request_info, write_memory]
-        CP[cultpass service<br/>CultPass system]
-        TS[tickets service<br/>tickets + memory]
-        KS[knowledge service<br/>KB + embeddings]
-    end
-    GW -->|POST message| AG
-    GW -->|GET ticket, messages| TS
-    AG -->|accounts, bookings| CP
-    AG -->|tickets, memory| TS
-    AG -->|RAG search| KS
-    subgraph PG [Postgres, a database per service]
-        D1[(cultpass)]
-        D2[(tickets)]
-        D3[(knowledge)]
-        D4[(agent_state<br/>checkpoints)]
-    end
-    subgraph MODELS [model providers]
-        LLM[(chat model<br/>OpenAI or Bedrock)]
-        EMB[(embeddings<br/>OpenAI, Bedrock<br/>or SageMaker)]
-    end
-    CP --- D1
-    TS --- D2
-    KS --- D3
-    AG --- D4
-    AG -.->|chat model| LLM
-    KS -.->|embeddings| EMB
-    JOBS[migrate, then seed<br/>one-shot jobs] -->|schema + demo data| D1 & D2 & D3
-    PR[prometheus] -.->|scrapes /metrics| SVC
-    GF([grafana<br/>UDA-Hub dashboard]) -->|queries| PR
-
-    classDef edge fill:#1e293b,stroke:#94a3b8,color:#ffffff,font-weight:bold
-    classDef agent fill:#4c1d95,stroke:#c4b5fd,color:#ffffff,font-weight:bold
-    classDef data fill:#14532d,stroke:#86efac,color:#ffffff,font-weight:bold
-    classDef ext fill:#7f1d1d,stroke:#fca5a5,color:#ffffff,font-weight:bold
-    classDef ops fill:#713f12,stroke:#fcd34d,color:#ffffff,font-weight:bold
-    class C,GW edge
-    class AG agent
-    class CP,TS,KS,D1,D2,D3,D4 data
-    class LLM,EMB ext
-    class JOBS,PR,GF ops
-    style SVC fill:#0f172a,stroke:#64748b,color:#ffffff
-    style PG fill:#0f172a,stroke:#64748b,color:#ffffff
-    style MODELS fill:#0f172a,stroke:#64748b,color:#ffffff
-```
-
 | Service | Owns | Does | Talks to |
 |---|---|---|---|
 | `gateway` | nothing | The only public endpoint (port 8080). Checks API keys, rate-limits each key, adds request ids, and returns only the reply and ticket status, never the agent's trace or internal notes | agent, tickets |
