@@ -3,7 +3,8 @@
 ## 1. Summary
 
 UDA-Hub resolves customer support tickets for CultPass, a subscription service for cultural experiences. A ticket
-arrives as a natural-language message with optional metadata (customer, channel, urgency). The system classifies
+arrives as a natural-language message with optional metadata (customer, channel, urgency), from a channel
+integration or, as microservices, from a customer who logged in. The system classifies
 it, routes it to a specialist agent, and either resolves it or escalates it to the right human team. It
 answers from a knowledge base, acts on the customer's account through tools, and remembers the customer across
 sessions.
@@ -17,7 +18,7 @@ sessions.
 | **Demonstration** | `solution/03_agentic_app.ipynb`, committed with the outputs of a real-model run: 13 scenarios, 5 edge cases, and demos of routing, retrieval, tools, memory and logs |
 | **Tests** | 74 offline tests in `solution/tests` (24 unit, 20 end-to-end through the graph with a scripted model, 26 for the evaluation suite, 4 for tracing) and 101 in `service/tests` (services, customer logins and tokens, the full HTTP flow, migrations on SQLite and Postgres). No API key needed; GitHub Actions runs them on every pull request |
 | **Evaluation** | `solution/evals`: 36 labelled tickets run against the real model, scored in code and by an LLM judge (section 4). Built, but not yet run: the course API key was suspended |
-| **Environment** | Python 3.11, LangGraph 1.2.20, LangChain 1.4.9, langchain-openai 1.7.4, langchain-aws 1.9.2, SQLAlchemy 2.1, FastAPI 0.162, Postgres 16 |
+| **Environment** | Python 3.11, LangGraph 1.2.20, LangChain 1.4.9, langchain-openai 1.7.4, langchain-aws 1.9.2, SQLAlchemy 2.1, FastAPI 0.162, Postgres 16, PyJWT 2.15, bcrypt 5.0, Langfuse 4.78 (SDK 5.2) |
 
 The main lesson matched what I'd learned building earlier agent systems: **the LLM proposes, code decides.**
 Almost every problem found by running the system against the real model was a decision left to the model that
@@ -31,7 +32,7 @@ One graph run handles one customer message:
 
 | Node | Uses the LLM | Role |
 |---|---|---|
-| `load_context` | No | Finds or creates the ticket, identifies the customer, and recalls long-term memory: preferences and previous tickets |
+| `load_context` | No | Finds or creates the ticket, identifies the customer (from the metadata, or as microservices from a verified login token), and recalls long-term memory: preferences and previous tickets |
 | `classifier` | Yes, structured output | Issue type (11 categories), urgency, sentiment, language, whether account action or a human is needed, confidence |
 | `supervisor` | No | Identifies a guest from an email in their message, then routes with plain-code rules |
 | `knowledge_agent` | Yes | RAG over the knowledge base, answering only from the retrieved articles |
@@ -118,8 +119,43 @@ So the agents, prompts, tools and rules are unchanged, and each business rule is
 
 ![UDA-Hub deployment as microservices](solution/agentic/design/deployment.svg)
 
-The whole stack has been built and run with Docker Compose. That run used a placeholder model key, so every
-message got the fallback reply; the gateway, health checks, migrations, seeding, metrics and dashboard worked.
+### Customer authentication
+
+Originally every caller was a trusted channel integration with an API key, and the customer was whoever the
+message metadata said, so anyone with a key could act as any customer. Customers can now log in themselves, and
+for them identity is something they proved, not something they typed:
+
+- **Verified sign-up.** Only CultPass customers can sign up, and only with a 6-digit code sent to their CultPass
+  email. Unverified sign-up would let anyone claim an account that has no login yet. The code expires after 10
+  minutes, works once, is burnt after 5 wrong guesses, and is stored only as an HMAC. Sign-up gives the same
+  answer whether or not the email is a customer's, so it can't be used to find accounts.
+- **Passwords** are bcrypt hashes. Five failures lock the login for 15 minutes. A wrong password, an unknown email
+  and a locked login get the same `401`, and an unknown email is still checked against a dummy hash so the
+  response time doesn't give it away.
+- **The token decides who the customer is.** The auth service issues a short-lived JWT (HS256, 60 minutes, with
+  issuer, audience and type). The gateway verifies it locally, without a call per request, sets the customer from
+  it, and drops identity fields from the metadata. The agent then runs exactly as for a channel, so none of the
+  agents, tools or rules changed.
+- **Customers only see their own tickets.** Another customer's ticket, or a guest ticket a channel started, is a
+  `404` like a missing one, so ticket ids can't be probed.
+- **Channels keep their API keys** and still see every ticket. Sign-up and login are rate-limited per client IP,
+  and each customer has their own request budget.
+
+### Tracing
+
+Prometheus answers "how many and how fast"; it can't show what the model saw. Optional Langfuse tracing records
+every graph run as one trace: each node, every model call with its prompt, response and token counts, and every
+tool call, grouped into a session per ticket. It is self-hosted in the same Docker Compose file (its own Postgres,
+ClickHouse, Redis and MinIO, under a `langfuse` profile), and it is off unless its keys are set, so the
+notebooks, the tests and the plain stack are unchanged. The user shown is the CultPass id, never the email.
+
+### Running it
+
+The whole stack has been built and run with Docker Compose: the gateway, health checks, migrations, seeding,
+metrics and dashboard, Langfuse, which recorded a trace for each message, and customer sign-up and login, where
+the token, not the metadata, decided who the customer was and another customer's ticket answered `404`. Those
+runs used a placeholder model key, so every message got the fallback reply. The course key is still suspended,
+so a full run with the real model needs a new OpenAI key or Bedrock credentials.
 
 ### Evaluation suite
 
@@ -194,6 +230,15 @@ Running the microservices and the evaluation suite for the first time found thes
 | **The model never ran in the tests.** Every test replaced the account agent with a fake, so moving from the deprecated `create_react_agent` to `create_agent` had no test of the real loop. | Two tests run the real `create_agent` with a scripted tool-calling model, and any deprecated LangGraph API now fails the tests. |
 | **Schema changes had no path.** Tables were created by the seed script, so changing a model meant rebuilding the databases. | Alembic migrations per database, with a test that fails when a model changes without a migration. |
 
+Adding tracing and customer logins found these:
+
+| Problem found | Fix |
+|---|---|
+| **An optional feature broke the default stack.** Marking Langfuse's secrets as required in Docker Compose made plain `docker compose up` fail too: Compose checks every service's variables, even in a profile that isn't running. | Blank defaults. Langfuse refuses to start without its secrets anyway, so a missing one still fails clearly, but only when that profile runs. |
+| **Traces had no name.** Langfuse v4 takes a trace's name from its own metadata key, not from LangGraph's run name. | The run's config sets that key. Checked by querying Langfuse's trace store after a real run. |
+| **A new database never reached existing installs.** Postgres runs its init script only when the volume is first created, so the new `auth` database would have existed only on fresh installs. | The script is now idempotent and a `db-setup` job runs it on every `up`. On an existing volume it created only `auth` and its role. |
+| **The tracing package was optional, so tracing could fail silently.** Keys set without the package installed would just trace nothing. | Tracing logs a warning in that case and stays off, which a test covers. A manual run with Langfuse unreachable confirmed that the reply isn't slowed down or broken: the export fails in the background. |
+
 ## 7. Lessons
 
 - **Move decisions with consequences out of the prompt.** Routing, escalation policy, id validation and memory
@@ -205,6 +250,11 @@ Running the microservices and the evaluation suite for the first time found thes
   section 6 only showed up in real runs. Several showed up only in some runs.
 - **Keep demo data reproducible.** All demo runs used copies of the committed databases, so the documented data
   stays accurate.
+- **Identity has to come from something the caller proved.** Taking the customer from the message metadata was
+  fine for trusted channels, but not for customers calling directly. Setting it from a verified token at the
+  gateway fixed that without touching any agent.
+- **Optional features must be off without configuration.** Tracing and the extra Compose profiles change nothing
+  unless they are configured, so the notebooks, the tests and the default stack keep working.
 
 ## 8. Limitations and next steps
 
@@ -220,8 +270,12 @@ Running the microservices and the evaluation suite for the first time found thes
   it could be. It also doesn't yet check what is written to long-term memory.
 - **Bedrock, SageMaker and the full stack with a real model haven't been run.** Bedrock and the SageMaker
   embeddings are covered by the offline tests only, and the Docker stack has only run with a placeholder key.
-- **The gateway's rate limit is per replica.** It is kept in memory; with several gateway replicas it would
-  need Redis or Valkey.
+- **The gateway's rate limits are per replica.** They are kept in memory; with several gateway replicas they
+  would need Redis or Valkey.
+- **Logins are demo-grade in three ways.** Verification codes are written to the auth service's log instead of
+  emailed. Tokens can't be revoked before they expire (no logout, refresh token or password reset). And the auth
+  service and the gateway share one HS256 key, so the gateway could create tokens; RS256 or EdDSA would give it
+  only a public key.
 - **Single platform.** Knowledge search already works per account, but the account tools are CultPass-specific.
 
 ## 9. Repository
@@ -230,7 +284,7 @@ Running the microservices and the evaluation suite for the first time found thes
 |---|---|
 | [`solution/`](solution/README.md) | The project: notebooks, `agentic/` (agents, tools, design), data and tests |
 | [`solution/evals/README.md`](solution/evals/README.md) | The evaluation suite: running it, what is checked, and the case format |
-| [`service/README.md`](service/README.md) | The microservices: architecture, running with Docker Compose, monitoring, schema migrations, the API |
+| [`service/README.md`](service/README.md) | The microservices: architecture, running with Docker Compose, customer logins (JWT), monitoring, LLM tracing (Langfuse), schema migrations, the API |
 | [`.github/workflows/tests.yml`](.github/workflows/tests.yml) | CI: both test suites, with a Postgres service, on every pull request |
 | [`solution/agentic/design/README.md`](solution/agentic/design/README.md) | Architecture, routing rules, memory, logging, safeguards, inputs and outputs |
 | [`solution/03_agentic_app.ipynb`](solution/03_agentic_app.ipynb) | The executed demonstration |
