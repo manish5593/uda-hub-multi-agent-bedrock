@@ -26,6 +26,7 @@ from agentic.agents.supervisor import request_info, supervise
 from agentic.event_log import log_event
 from agentic.state import UdaHubState
 from agentic.tools import ticket_tools
+from agentic.tracing import run_config
 
 logger = logging.getLogger("udahub")
 
@@ -90,7 +91,7 @@ def process_ticket(text: str, ticket_id: str, metadata: Optional[dict] = None, a
     if metadata:
         payload["metadata"] = metadata
     try:
-        return agent.invoke(payload, config={"configurable": {"thread_id": ticket_id}})
+        return agent.invoke(payload, config=run_config(ticket_id, metadata))
     except Exception as exc:
         return _handle_failure(ticket_id, exc)
 

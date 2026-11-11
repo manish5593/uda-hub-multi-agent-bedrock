@@ -2,6 +2,7 @@
 #   cp .env.example .env && cp llm.env.example llm.env   # then fill both in
 #   docker compose up --build
 #   docker compose --profile monitoring up --build        # also Prometheus (:9090) and Grafana (:3000)
+#   docker compose --profile langfuse up --build          # also Langfuse LLM tracing (:3001)
 # Only the gateway is published (port 8080); everything else is on the internal network.
 name: udahub
 
@@ -108,6 +109,11 @@ services:
       TICKET_SERVICE_URL: http://tickets:8000
       KNOWLEDGE_SERVICE_URL: http://knowledge:8000
       AGENT_STATE_DB_URL: postgresql://agent_state_svc:${AGENT_STATE_DB_PASSWORD}@db:5432/agent_state
+      # Langfuse tracing: on when both keys are set in .env (run with --profile langfuse), off when they are empty
+      LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}
+      LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
+      LANGFUSE_BASE_URL: http://langfuse-web:3000
+      LANGFUSE_TRACING_ENVIRONMENT: docker
     volumes:
       - agent-logs:/app/logs
     healthcheck: *healthcheck
@@ -167,6 +173,141 @@ services:
     depends_on: [prometheus]
     networks: [internal]
 
+  # LLM tracing: http://localhost:3001. Langfuse web and worker plus the stores they need: their own Postgres,
+  # ClickHouse (traces), Redis (queue) and MinIO (raw events). Adapted from Langfuse's docker-compose.yml
+  # (v4.78.0): only the web UI is published, on localhost. The organisation, project, API keys and admin user
+  # are created on first start from the LANGFUSE_* values in .env, so the agent can send traces right away.
+  langfuse-worker:
+    profiles: [langfuse]
+    image: langfuse/langfuse-worker:4.78.0
+    restart: unless-stopped
+    environment: &langfuse-env
+      NEXTAUTH_URL: http://localhost:${LANGFUSE_PORT:-3001}
+      DATABASE_URL: postgresql://postgres:${LANGFUSE_DB_PASSWORD:-}@langfuse-db:5432/postgres
+      SALT: ${LANGFUSE_SALT:-}
+      ENCRYPTION_KEY: ${LANGFUSE_ENCRYPTION_KEY:-}
+      TELEMETRY_ENABLED: "false"
+      CLICKHOUSE_MIGRATION_URL: clickhouse://langfuse-clickhouse:9000
+      CLICKHOUSE_URL: http://langfuse-clickhouse:8123
+      CLICKHOUSE_USER: clickhouse
+      CLICKHOUSE_PASSWORD: ${LANGFUSE_CLICKHOUSE_PASSWORD:-}
+      CLICKHOUSE_CLUSTER_ENABLED: "false"
+      LANGFUSE_S3_EVENT_UPLOAD_BUCKET: langfuse
+      LANGFUSE_S3_EVENT_UPLOAD_REGION: auto
+      LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: minio
+      LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: ${LANGFUSE_MINIO_PASSWORD:-}
+      LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: http://langfuse-minio:9000
+      LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE: "true"
+      LANGFUSE_S3_EVENT_UPLOAD_PREFIX: events/
+      LANGFUSE_S3_MEDIA_UPLOAD_BUCKET: langfuse
+      LANGFUSE_S3_MEDIA_UPLOAD_REGION: auto
+      LANGFUSE_S3_MEDIA_UPLOAD_ACCESS_KEY_ID: minio
+      LANGFUSE_S3_MEDIA_UPLOAD_SECRET_ACCESS_KEY: ${LANGFUSE_MINIO_PASSWORD:-}
+      LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT: http://langfuse-minio:9000
+      LANGFUSE_S3_MEDIA_UPLOAD_FORCE_PATH_STYLE: "true"
+      LANGFUSE_S3_MEDIA_UPLOAD_PREFIX: media/
+      REDIS_HOST: langfuse-redis
+      REDIS_PORT: "6379"
+      REDIS_AUTH: ${LANGFUSE_REDIS_PASSWORD:-}
+    depends_on: &langfuse-depends-on
+      langfuse-db: {condition: service_healthy}
+      langfuse-clickhouse: {condition: service_healthy}
+      langfuse-redis: {condition: service_healthy}
+      langfuse-minio: {condition: service_healthy}
+    networks: [internal]
+
+  langfuse-web:
+    profiles: [langfuse]
+    image: langfuse/langfuse:4.78.0
+    restart: unless-stopped
+    environment:
+      <<: *langfuse-env
+      NEXTAUTH_SECRET: ${LANGFUSE_NEXTAUTH_SECRET:-}
+      LANGFUSE_INIT_ORG_ID: udahub
+      LANGFUSE_INIT_ORG_NAME: UDA-Hub
+      LANGFUSE_INIT_PROJECT_ID: udahub
+      LANGFUSE_INIT_PROJECT_NAME: UDA-Hub agent
+      LANGFUSE_INIT_PROJECT_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}
+      LANGFUSE_INIT_PROJECT_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
+      LANGFUSE_INIT_USER_EMAIL: ${LANGFUSE_ADMIN_EMAIL:-admin@udahub.local}
+      LANGFUSE_INIT_USER_NAME: admin
+      LANGFUSE_INIT_USER_PASSWORD: ${LANGFUSE_ADMIN_PASSWORD:-}
+      AUTH_DISABLE_SIGNUP: "true"
+    ports:
+      - "127.0.0.1:${LANGFUSE_PORT:-3001}:3000"
+    depends_on: *langfuse-depends-on
+    networks: [internal]
+
+  langfuse-db:
+    profiles: [langfuse]
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: ${LANGFUSE_DB_PASSWORD:-}
+      TZ: UTC
+      PGTZ: UTC
+    volumes:
+      - langfuse-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+    networks: [internal]
+
+  langfuse-clickhouse:
+    profiles: [langfuse]
+    image: clickhouse/clickhouse-server:26.3.62.3
+    restart: unless-stopped
+    user: "101:101"
+    environment:
+      CLICKHOUSE_DB: default
+      CLICKHOUSE_USER: clickhouse
+      CLICKHOUSE_PASSWORD: ${LANGFUSE_CLICKHOUSE_PASSWORD:-}
+    volumes:
+      - langfuse-clickhouse-data:/var/lib/clickhouse
+      - langfuse-clickhouse-logs:/var/log/clickhouse-server
+    healthcheck:
+      test: wget --no-verbose --tries=1 --spider http://localhost:8123/ping || exit 1
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks: [internal]
+
+  langfuse-redis:
+    profiles: [langfuse]
+    image: redis:7.4.9-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--requirepass", "${LANGFUSE_REDIS_PASSWORD:-}", "--maxmemory-policy", "noeviction"]
+    volumes:
+      - langfuse-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${LANGFUSE_REDIS_PASSWORD:-}", "--no-auth-warning", "ping"]
+      interval: 3s
+      timeout: 10s
+      retries: 10
+    networks: [internal]
+
+  # Chainguard publishes only a rolling tag for MinIO; this is the image Langfuse's own compose file uses
+  langfuse-minio:
+    profiles: [langfuse]
+    image: cgr.dev/chainguard/minio:latest
+    restart: unless-stopped
+    entrypoint: sh
+    # Create the 'langfuse' bucket before starting the server
+    command: -c 'mkdir -p /data/langfuse && minio server --address ":9000" --console-address ":9001" /data'
+    environment:
+      MINIO_ROOT_USER: minio
+      MINIO_ROOT_PASSWORD: ${LANGFUSE_MINIO_PASSWORD:-}
+    volumes:
+      - langfuse-minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 2s
+      timeout: 5s
+      retries: 10
+    networks: [internal]
+
 networks:
   internal: {}
 
@@ -174,3 +315,8 @@ volumes:
   pgdata: {}
   agent-logs: {}
   grafana-data: {}
+  langfuse-pgdata: {}
+  langfuse-clickhouse-data: {}
+  langfuse-clickhouse-logs: {}
+  langfuse-redis-data: {}
+  langfuse-minio-data: {}

@@ -10,6 +10,8 @@ from langchain_core.messages import (
 )
 from langgraph.graph.state import CompiledStateGraph
 
+from agentic.tracing import run_config
+
 
 Base = declarative_base()
 
@@ -63,12 +65,9 @@ def chat_interface(agent:CompiledStateGraph, ticket_id:str):
         trigger = {
             "messages": messages
         }
-        config = {
-            "configurable": {
-                "thread_id": ticket_id,
-            }
-        }
-        
+        # The checkpointer thread, plus Langfuse tracing when its keys are set
+        config = run_config(ticket_id)
+
         result = agent.invoke(input=trigger, config=config)
         print("Assistant:", result["messages"][-1].content)
         is_first_iteration = False

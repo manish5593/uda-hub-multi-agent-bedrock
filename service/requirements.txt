@@ -5,6 +5,7 @@ alembic==1.20.1
 boto3==1.43.127
 fastapi==0.162.2
 httpx==0.28.1
+langfuse==5.2.0
 langchain==1.4.9
 langchain-aws==1.9.2
 langchain-core==1.7.6

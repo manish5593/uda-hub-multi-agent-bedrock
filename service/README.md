@@ -12,8 +12,8 @@ service that owns that data, depending on configuration (see [How the split work
 **Status:** the services, the Postgres paths, the migrations and the HTTP flow between the services are covered
 by `service/tests`, which CI also runs against Postgres 16. The images build and the whole stack, monitoring
 included, has been run with `docker compose`: migrations, seed, health checks, the gateway, Prometheus and
-Grafana. That run used a placeholder model key, so messages got the fallback reply; a run with real model
-credentials is still to do.
+Grafana, and Langfuse, which recorded a trace for each message sent through the gateway. That run used a
+placeholder model key, so messages got the fallback reply; a run with real model credentials is still to do.
 
 ## Architecture
 
@@ -169,6 +169,33 @@ and export its JSON into that file). Grafana picks up changes to the file within
 Counts over a time range use Prometheus's `increase()`, which extrapolates to the edges of the range, so a
 small count can read slightly high (for example 5 for 4 messages).
 
+### LLM tracing (Langfuse)
+
+```bash
+docker compose --profile langfuse up --build
+# both profiles at once:
+docker compose --profile monitoring --profile langfuse up --build
+```
+
+This also starts a self-hosted [Langfuse](https://langfuse.com) on <http://localhost:3001> (localhost only).
+Log in with `LANGFUSE_ADMIN_EMAIL` and `LANGFUSE_ADMIN_PASSWORD` from `.env`; the **UDA-Hub** organisation,
+the **UDA-Hub agent** project and its API keys (`LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`) are created on
+first start, so the agent sends traces with no setup in the UI.
+
+Each customer message is one trace named `udahub-ticket`: every graph node, every model call with its prompt,
+response and token counts, and every tool call. Traces are grouped into a session per ticket id, so the turns
+of one conversation sit together, and tagged with the account and channel. The user is the CultPass
+`external_user_id` when the channel sends it; emails are never sent to Langfuse. Prometheus answers "how many
+and how fast"; Langfuse answers "what exactly did the model see and say".
+
+Langfuse runs as its web app and worker plus its own Postgres, ClickHouse, Redis and MinIO, adapted from
+Langfuse's `docker-compose.yml` for v4.78.0. Tracing is code in `solution/agentic/tracing.py` and is off
+whenever the two keys are empty, so the stack without this profile is unchanged. If the keys are set but the
+profile isn't running, the agent still works and logs that it can't reach Langfuse.
+
+The notebooks can send traces to the same Langfuse: set `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY` and
+`LANGFUSE_BASE_URL=http://localhost:3001` in `solution/.env`.
+
 ### Schema migrations
 
 Each service database has its own [Alembic](https://alembic.sqlalchemy.org) history in
@@ -247,6 +274,11 @@ UDAHUB_TEST_POSTGRES_URL=postgresql+psycopg://postgres:<password>@localhost:5432
 | `UDAHUB_SERVICE_TIMEOUT` | agent | Seconds per internal call (default 15) |
 | Model settings (`llm.env`) | agent, knowledge | As in `solution/.env.example` |
 | `GRAFANA_ADMIN_PASSWORD` | grafana | Password of Grafana's `admin` user (default `admin`) |
+| `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY` | agent, langfuse-web | The Langfuse project's API keys (`pk-lf-…`, `sk-lf-…`), created on Langfuse's first start; tracing is off when they are empty |
+| `LANGFUSE_ADMIN_EMAIL`, `LANGFUSE_ADMIN_PASSWORD` | langfuse-web | The Langfuse login created on first start |
+| `LANGFUSE_NEXTAUTH_SECRET`, `LANGFUSE_SALT`, `LANGFUSE_ENCRYPTION_KEY` | langfuse-web, langfuse-worker | Langfuse's own secrets; the encryption key is 64 hex characters (`openssl rand -hex 32`) |
+| `LANGFUSE_DB_PASSWORD`, `LANGFUSE_CLICKHOUSE_PASSWORD`, `LANGFUSE_REDIS_PASSWORD`, `LANGFUSE_MINIO_PASSWORD` | Langfuse and its stores | Passwords of Langfuse's Postgres, ClickHouse, Redis and MinIO |
+| `LANGFUSE_PORT` | langfuse-web | Port of the Langfuse UI on localhost (default 3001) |
 
 ## Limitations
 
