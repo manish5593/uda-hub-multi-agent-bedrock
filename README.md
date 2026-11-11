@@ -59,7 +59,8 @@ The same workflow, with the same nodes, prompts, tools and rules, runs in two wa
 - **In process**, from the notebooks or `process_ticket()`, against the committed SQLite databases (`solution/`).
 - **As microservices** behind an API gateway, run with Docker Compose ([`service/`](service/README.md)). The
   whole workflow runs inside the agent service; the tickets, cultpass and knowledge services only hold data, each
-  in its own Postgres database. Prometheus and Grafana show traffic and support outcomes.
+  in its own Postgres database. Prometheus and Grafana show traffic and support outcomes, and Langfuse
+  traces every model and tool call.
 
 ![UDA-Hub deployment as microservices](solution/agentic/design/deployment.svg)
 
@@ -89,6 +90,7 @@ solution/
 │   ├── design/                  # architecture diagram, Mermaid graph and design document
 │   ├── config.py                # model providers, models, paths and thresholds
 │   ├── llm.py                   # chat and embedding models for OpenAI, Bedrock or SageMaker
+│   ├── tracing.py               # optional Langfuse tracing of every graph run
 │   └── state.py                 # graph state and structured-output schemas
 ├── data/                        # SQLAlchemy models, JSONL seed data and the SQLite databases
 ├── deploy/                      # deploy and delete the SageMaker embedding endpoint
@@ -102,7 +104,7 @@ solution/
 |---|---|
 | [`report.md`](report.md) | Project report: architecture, results, the problems found in real-model testing and how each was fixed, lessons, and limitations |
 | [`solution/README.md`](solution/README.md) | Project guide: ticket flow, demo results, and where each requirement is met |
-| [`service/README.md`](service/README.md) | Microservices: architecture, how the split works, running with Docker Compose, monitoring with Grafana, schema migrations, the public API, and limitations |
+| [`service/README.md`](service/README.md) | Microservices: architecture, how the split works, running with Docker Compose, monitoring with Grafana, LLM tracing with Langfuse, schema migrations, the public API, and limitations |
 | [`evals/`](solution/evals/README.md) | Evaluation suite: running it, what is checked, and the case format |
 | [`agentic/design/`](solution/agentic/design/README.md) | Architecture, routing rules, resolve-or-escalate logic, memory, and safeguards |
 | [`agentic/agents/`](solution/agentic/agents/README.md) | Each agent node, the long-term memory rules, and how to add an agent |
@@ -169,6 +171,23 @@ A real-time endpoint is billed for every hour it exists, whether or not it is us
 python -m deploy.sagemaker_embeddings delete
 ```
 
+### Tracing with Langfuse (optional)
+
+Every graph run can be traced in [Langfuse](https://langfuse.com): each node, every model call with its prompt,
+response and token counts, and every tool call. One customer message is one trace, and the turns of a ticket are
+grouped into a session. Tracing is off unless `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY` are set, so nothing
+changes without them (`agentic/tracing.py`).
+
+The Docker Compose setup includes a self-hosted Langfuse. From `service/`:
+
+```bash
+docker compose --profile langfuse up --build    # Langfuse UI on http://localhost:3001
+```
+
+The login, project and API keys are created on first start from `service/.env` (see
+[`service/README.md`](service/README.md#llm-tracing-langfuse)). The agent service sends its traces there. To trace
+the notebooks too, add the same two keys and `LANGFUSE_BASE_URL=http://localhost:3001` to `solution/.env`.
+
 ## Testing
 
 From `solution/`:
@@ -221,6 +240,8 @@ python -m evals.run
   - the real `create_agent` loop with a scripted tool-calling model: a real tool call, and the step limit
 - `tests/test_evals.py` checks the evaluation suite itself: the case file, every check, judge errors, fresh
   databases per run, errored runs, the model check, the report and `--fail-under`
+- `tests/test_tracing.py` checks that Langfuse tracing is off without keys or without the package, and that when
+  it is on each run gets its own handler, a session per ticket, and never the customer's email
 - `service/tests/` covers the microservices in one process: the service APIs, internal-token and API-key checks,
   rate limiting, the full gateway → agent → services flow, the agent metrics, a service outage mid-turn, and the
   Alembic migrations (that they match the models, downgrade cleanly, and adopt databases created before them)
@@ -287,4 +308,5 @@ The model's wording varies from run to run, but the routes and outcomes above we
 * [PostgreSQL](https://www.postgresql.org/) and [Alembic](https://alembic.sqlalchemy.org/) - Service databases, LangGraph checkpoints and schema migrations
 * [Docker Compose](https://docs.docker.com/compose/) - Running the services together
 * [Prometheus](https://prometheus.io/) and [Grafana](https://grafana.com/) - Metrics and the UDA-Hub dashboard
+* [Langfuse](https://langfuse.com/) - Self-hosted tracing of every graph run: prompts, responses, tokens and tool calls
 * [GitHub Actions](https://docs.github.com/actions) - Continuous integration

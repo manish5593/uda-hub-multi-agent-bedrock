@@ -18,7 +18,7 @@
 <text x="951" y="65.5" font-size="8.5" font-weight="700" fill="#ffffff" text-anchor="middle">LLM</text>
 <text x="970" y="67" class="sh">calls the LLM</text>
 <rect x="300" y="100" width="700" height="595" rx="12" fill="none" stroke="#5b6779" stroke-width="1.2" stroke-dasharray="4 4"/>
-<text x="314" y="93" class="ph">Internal Docker network · only the gateway is published (port 8080)</text>
+<text x="314" y="93" class="ph">Internal Docker network · only the gateway is published (port 8080), Langfuse on localhost</text>
 <rect x="25" y="328" width="245" height="270" rx="12" fill="none" stroke="#5b6779" stroke-width="1.2" stroke-dasharray="4 4"/>
 <text x="39" y="348" class="ph">--profile monitoring</text>
 <rect x="1015" y="100" width="170" height="345" rx="12" fill="none" stroke="#2d3748" stroke-width="1.2" stroke-dasharray="4 4"/>
@@ -130,6 +130,13 @@
 <text x="478.0" y="635.0" class="t">migrate, then seed (one-shot jobs)</text>
 <text x="478.0" y="653.0" class="s">Alembic migrations · demo data into empty tables</text>
 <path d="M480 605 V579" fill="none" stroke="#4a5568" stroke-width="1.6" marker-end="url(#arrow)"/>
+<rect x="658" y="605" width="325" height="66" rx="10" fill="#fdeefd" stroke="#c026d3" stroke-width="1.6"/>
+<text x="820.5" y="627.0" class="t">Langfuse (--profile langfuse)</text>
+<text x="820.5" y="645.0" class="s">every node, model and tool call · localhost:3001</text>
+<text x="820.5" y="661.0" class="s">own Postgres, ClickHouse, Redis and MinIO</text>
+<path d="M820 308 V601" fill="none" stroke="#ffffff" stroke-width="7"/>
+<path d="M820 308 V601" fill="none" stroke="#4a5568" stroke-width="1.6" stroke-dasharray="6 4" marker-end="url(#arrow)"/>
+<text x="826" y="594" class="l" text-anchor="start">traces (when keys are set)</text>
 <rect x="40" y="365" width="210" height="76" rx="10" fill="#fdeefd" stroke="#c026d3" stroke-width="1.6"/>
 <text x="145.0" y="392.0" class="t">Prometheus</text>
 <text x="145.0" y="410.0" class="s">scrapes /metrics every 15 s</text>

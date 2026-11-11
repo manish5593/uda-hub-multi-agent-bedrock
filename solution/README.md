@@ -51,6 +51,12 @@ interactive chat (`chat_interface(orchestrator, "1")`).
 To use Amazon Bedrock or a SageMaker embedding endpoint instead of OpenAI, see the
 [root README](../README.md#sagemaker-embeddings) and `.env.example`.
 
+To trace runs in Langfuse (each node, model call and tool call, grouped by ticket), start the self-hosted Langfuse
+with `docker compose --profile langfuse up` from `service/`, then add `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`
+(both from `service/.env`) and `LANGFUSE_BASE_URL=http://localhost:3001` to `.env`. The notebook demos and
+`chat_interface` are then traced on <http://localhost:3001>. Without these keys, tracing is off. See the
+[root README](../README.md#tracing-with-langfuse-optional).
+
 The demos make real changes: bookings and cancellations, plus new tickets and memories. To reset the data, re-run:
 
 1. `01_external_db_setup.ipynb`, which rebuilds `data/external/cultpass.db`
@@ -112,6 +118,7 @@ python -m pytest tests
   - an LLM outage or unknown account that gets a fallback reply instead of a crash, and an empty message
   - the real `create_agent` loop with a scripted tool-calling model, and its step limit
 - `tests/test_evals.py` checks the evaluation suite's own scoring and runner.
+- `tests/test_tracing.py` checks that Langfuse tracing is off without keys, and what each traced run sends.
 
 ## Evaluation
 
@@ -139,13 +146,14 @@ See [`evals/README.md`](evals/README.md) for the checks, the case format, and th
 | `agentic/remote/` | HTTP clients the tools use when running as microservices ([`service/`](../service/README.md)) |
 | `agentic/demo_data.py` | Throwaway copies of the demo databases with the dates moved to today, for the tests and evaluations |
 | `agentic/state.py` | Graph state and structured-output schemas |
+| `agentic/tracing.py` | Optional Langfuse tracing: adds the Langfuse callback, session (ticket id), user and tags to each graph run when the `LANGFUSE_*` keys are set |
 | [`data/core/`](data/core/README.md) | `udahub.db`: tables, committed contents, how the agents write to it, and adding articles |
 | [`data/external/`](data/external/README.md) | `cultpass.db`, the JSONL seed data, the demo customers, resetting, and adding data |
 | `data/models/` | SQLAlchemy models for both databases |
 | `tests/` | Unit tests and end-to-end graph tests |
 | [`evals/`](evals/README.md) | Evaluation suite: labelled cases (`cases.json`), the runner, scoring and LLM judge |
 | `utils.py` | Course-provided helpers, including `chat_interface` |
-| `.env.example` | Template for `.env`, which holds the model settings: an `OPENAI_API_KEY`, or Bedrock and AWS settings |
+| `.env.example` | Template for `.env`, which holds the model settings: an `OPENAI_API_KEY`, or Bedrock and AWS settings, plus the optional Langfuse keys |
 
 The project overview for the whole repository is in the [root README](../README.md).
 

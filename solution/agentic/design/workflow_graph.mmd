@@ -46,14 +46,17 @@ flowchart TD
     request_info --> finalize
     finalize --> write_memory --> OUT
 
-    subgraph TOOLS ["<span style='color:rgb(26,32,44)'>Tools#160;&#160;data#160;(agentic/tools,#160;data/)</span>"]
+    subgraph TOOLS ["<span style='color:rgb(26,32,44)'>Tools &amp; data (agentic/tools, data/)</span>"]
         direction TB
         knowledge_tools("<span style='color:rgb(26,32,44)'>knowledge_tools<br/><small style='font-weight:normal;font-size:13px'>embeddings (OpenAI, Bedrock or SageMaker)<br/>keyword fallback · knowledge_agent</small></span>")
         cultpass_tools("<span style='color:rgb(26,32,44)'>cultpass_tools<br/><small style='font-weight:normal;font-size:13px'>bound to the ticket's customer<br/>book · cancel · subscription · refund</small></span>")
         ticket_tools("<span style='color:rgb(26,32,44)'>ticket_tools<br/><small style='font-weight:normal;font-size:13px'>tickets, messages, metadata<br/>customer_memory (long-term)</small></span>")
         checkpointer("<span style='color:rgb(26,32,44)'>Checkpointer<br/><small style='font-weight:normal;font-size:13px'>short-term memory per thread_id<br/>MemorySaver · PostgresSaver (service/)</small></span>")
+        tracing("<span style='color:rgb(26,32,44)'>Tracing<br/><small style='font-weight:normal;font-size:13px'>agentic/tracing.py · Langfuse, when the LANGFUSE_* keys are set<br/>every run, node, model call and tool call</small></span>")
         knowledge_tools ~~~ ticket_tools
         cultpass_tools ~~~ checkpointer
+        ticket_tools ~~~ tracing
+        checkpointer ~~~ tracing
     end
     OUT ~~~ TOOLS
 
@@ -68,7 +71,7 @@ flowchart TD
     classDef quality_gate fill:#ffe8d6,stroke:#c05621,stroke-width:2px,color:#1a202c,font-weight:bold,font-size:15px
     classDef escalation_agent fill:#fdecea,stroke:#c0392b,stroke-width:2px,color:#1a202c,font-weight:bold,font-size:15px
     class IN,OUT customer
-    class knowledge_tools,cultpass_tools,ticket_tools,checkpointer tools
+    class knowledge_tools,cultpass_tools,ticket_tools,checkpointer,tracing tools
     class load_context,finalize,write_memory memory_agent
     class classifier classifier
     class supervisor,request_info supervisor
@@ -78,5 +81,5 @@ flowchart TD
     class escalation_agent escalation_agent
     style TOOLS fill:#fffdf7,stroke:#b7791f,stroke-width:1.5px,stroke-dasharray:5 4,color:#1a202c
     linkStyle default stroke:#718096,stroke-width:2.5px
-    %% links 16-18 only position the tools panel (two by two, below the reply): keep them invisible
-    linkStyle 16,17,18 stroke:none
+    %% links 16-20 only position the tools panel (two by two, tracing below, all below the reply): keep them invisible
+    linkStyle 16,17,18,19,20 stroke:none

@@ -18,7 +18,7 @@ Files in this folder:
 | File | Contents |
 |---|---|
 | `architecture.svg` | The agent workflow above: every node by its name in the code, the decision paths, tools, data stores and memory |
-| `deployment.svg` | Where that workflow runs as microservices (see [Deployment](#deployment)): API gateway, services, Postgres, migrations, Prometheus and Grafana, and the model providers |
+| `deployment.svg` | Where that workflow runs as microservices (see [Deployment](#deployment)): API gateway, services, Postgres, migrations, Prometheus and Grafana, Langfuse, and the model providers |
 | `workflow_graph.mmd` | The same diagram as `architecture.svg` in Mermaid, so GitHub and IDEs can render it: the same layout, node descriptions, route labels, tools panel and colours, with a red `LLM` badge on the nodes that call the model; the text is black. In labels, write colours as `rgb(...)`: Mermaid reads `#xxxxxx;` as a character code and breaks the style. It is hand-written; when the graph changes, check its nodes and edges against `orchestrator.get_graph().draw_mermaid()`. |
 | `README.md` | This design document |
 
@@ -175,7 +175,8 @@ The same graph runs in two ways, with the same nodes, prompts, tools and rules:
 - **As microservices** ([`service/`](../../../service/README.md), diagram below): an API gateway, the agent service, and CultPass,
   ticket and knowledge services, each with its own Postgres database. The agent's tools call the other services
   over HTTP (`agentic/remote`), the checkpointer is `PostgresSaver`, schema changes are Alembic migrations, and
-  Prometheus and Grafana show traffic and support outcomes.
+  Prometheus and Grafana show traffic and support outcomes, and Langfuse (optional) traces every model and
+  tool call.
 
 ![UDA-Hub deployment as microservices](deployment.svg)
 
