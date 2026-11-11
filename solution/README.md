@@ -13,8 +13,13 @@ and policy that is enforced in code rather than left to the model.
 
 ![UDA-Hub agent workflow](agentic/design/architecture.svg)
 
-Purple nodes use the LLM, gray nodes are plain code, red is the escalation to a human, and dashed arrows are
-conditional routes. The node names are the ones in `agentic/workflow.py`.
+Each node is coloured by its agent type, the module in `agentic/agents` it comes from: gray `memory_agent`
+(`load_context`, `finalize`, `write_memory`), teal `classifier`, purple `supervisor` (`supervisor`,
+`request_info`), blue `knowledge_agent`, brown `account_agent`, orange `quality_gate` (`quality_gate`, `approve`)
+and red `escalation_agent`. A red **LLM** badge marks every node that calls the model; it is not a colour. Green is
+the customer, yellow is tools and data, and dashed arrows are conditional routes. The node names are the ones in
+`agentic/workflow.py`. When deployed as microservices, the same nodes run inside the agent service: see
+[`deployment.svg`](agentic/design/deployment.svg), which uses the same colours.
 
 | Node | What it does |
 |---|---|

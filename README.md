@@ -20,6 +20,13 @@ Two diagrams describe the system, and both use the node names from the code
 1. **The agent workflow**: what happens to one customer message.
 2. **The deployment**: where that workflow runs when it is deployed as microservices.
 
+Both use the same colours. Each node is coloured by its agent type, the module in `agentic/agents` it comes from: gray `memory_agent`
+(`load_context`, `finalize`, `write_memory`), teal `classifier`, purple `supervisor` (`supervisor`,
+`request_info`), blue `knowledge_agent`, brown `account_agent`, orange `quality_gate` (`quality_gate`, `approve`)
+and red `escalation_agent`. A red **LLM** badge marks every node that calls the model; it is not a colour. Green is
+the customer, yellow is tools and data, and dashed arrows are conditional routes. The deployment adds magenta for
+the containers (gateway, services, monitoring) and dark slate for the external model APIs.
+
 ### 1. The agent workflow
 
 ![UDA-Hub agent workflow](solution/agentic/design/architecture.svg)

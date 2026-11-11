@@ -1,4 +1,4 @@
-# UDA-Hub as microservices
+C# UDA-Hub as microservices
 
 This folder runs UDA-Hub as four services behind an API gateway, with Postgres. The approach follows
 [fastapi-langgraph-agent-production-ready-template](https://github.com/wassim249/fastapi-langgraph-agent-production-ready-template),
@@ -18,6 +18,18 @@ credentials is still to do.
 ## Architecture
 
 ![UDA-Hub deployment as microservices](../solution/agentic/design/deployment.svg)
+
+The gateway is the only public entry point. The **agent service** runs the whole LangGraph workflow: its nodes are
+shown in the order they run, with the same names as in `solution/agentic/workflow.py` (the full workflow, with
+each node's role and routing conditions, is [`architecture.svg`](../solution/agentic/design/architecture.svg)).
+The tickets, cultpass and knowledge services only hold data, each in its own Postgres database.
+
+Each node is coloured by its agent type, the module in `agentic/agents` it comes from: gray `memory_agent`
+(`load_context`, `finalize`, `write_memory`), teal `classifier`, purple `supervisor` (`supervisor`,
+`request_info`), blue `knowledge_agent`, brown `account_agent`, orange `quality_gate` (`quality_gate`, `approve`)
+and red `escalation_agent`. A red **LLM** badge marks every node that calls the model; it is not a colour. Green is
+the customer, yellow is tools and data, and dashed arrows are conditional routes. This diagram adds magenta for the
+containers (gateway, services, monitoring) and dark slate for the external model APIs.
 
 | Service | Owns | Does | Talks to |
 |---|---|---|---|

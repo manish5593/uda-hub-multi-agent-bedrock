@@ -5,7 +5,13 @@ accounts it serves (currently **CultPass**). It reads tickets in natural languag
 metadata. It routes each one to a specialised agent, which resolves it with RAG and account tools or
 escalates it to a human. Throughout, it uses short- and long-term memory.
 
-![UDA-Hub architecture](architecture.svg)
+![UDA-Hub agent workflow](architecture.svg)
+
+Each node is coloured by its agent type, the module in `agentic/agents` it comes from: gray `memory_agent`
+(`load_context`, `finalize`, `write_memory`), teal `classifier`, purple `supervisor` (`supervisor`,
+`request_info`), blue `knowledge_agent`, brown `account_agent`, orange `quality_gate` (`quality_gate`, `approve`)
+and red `escalation_agent`. A red **LLM** badge marks every node that calls the model; it is not a colour. Green is
+the customer, yellow is tools and data, and dashed arrows are conditional routes.
 
 Files in this folder:
 
@@ -13,7 +19,7 @@ Files in this folder:
 |---|---|
 | `architecture.svg` | The agent workflow above: every node by its name in the code, the decision paths, tools, data stores and memory |
 | `deployment.svg` | Where that workflow runs as microservices (see [Deployment](#deployment)): API gateway, services, Postgres, migrations, Prometheus and Grafana, and the model providers |
-| `workflow_graph.mmd` | Mermaid source exported from the compiled graph (`orchestrator.get_graph().draw_mermaid()`), with a dark `classDef` color scheme added at the end (same color meaning as `architecture.svg`). Re-apply them if you regenerate the file. |
+| `workflow_graph.mmd` | Mermaid source exported from the compiled graph (`orchestrator.get_graph().draw_mermaid()`), with theme settings added at the top (dark text on every node, whatever the viewer's theme) and `classDef` colors added at the end (the same palette and meaning as `architecture.svg` and `deployment.svg`) and a red `LLM` label on the nodes that call the model; the colours show the agent type. Re-apply both if you regenerate the file. |
 | `README.md` | This design document |
 
 ## Architecture pattern: Supervisor
@@ -162,7 +168,7 @@ repeated runs: routing, outcomes, escalation teams, tool calls, and whether repl
 
 ## Deployment
 
-The same graph runs in two ways, with the same agents, prompts, tools and rules:
+The same graph runs in two ways, with the same nodes, prompts, tools and rules:
 
 - **In process** (notebooks, tests, evaluation): the tools read and write the SQLite files in `data/`, and the
   checkpointer is `MemorySaver`.
@@ -172,6 +178,9 @@ The same graph runs in two ways, with the same agents, prompts, tools and rules:
   Prometheus and Grafana show traffic and support outcomes.
 
 ![UDA-Hub deployment as microservices](deployment.svg)
+
+It uses the same colours as the workflow diagram, plus magenta for the containers and dark slate for the external
+model APIs. The agent service box shows the same nodes in the order they run.
 
 ## Logging
 

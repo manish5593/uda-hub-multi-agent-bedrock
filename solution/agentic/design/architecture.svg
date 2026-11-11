@@ -1,19 +1,22 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 1110" width="1200" height="1110" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 1140" width="1200" height="1140" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">
 <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#4a5568"/></marker></defs>
 <style>.t{font-size:15px;font-weight:600;fill:#1a202c;text-anchor:middle}.s{font-size:12px;fill:#4a5568;text-anchor:middle}.l{font-size:11.5px;fill:#4a5568;font-style:italic}.h{font-size:24px;font-weight:700;fill:#1a202c}.sh{font-size:13px;fill:#4a5568}.ph{font-size:14px;font-weight:700;fill:#1a202c}</style>
-<rect width="1200" height="1110" fill="#ffffff"/>
-<text x="40" y="44" class="h">UDA-Hub: multi-agent support workflow (LangGraph)</text>
+<rect width="1200" height="1140" fill="#ffffff"/>
+<text x="40" y="44" class="h">UDA-Hub: agent workflow (LangGraph)</text>
 <text x="40" y="66" class="sh">One graph run per customer message · thread_id = ticket id · models: OpenAI or Amazon Bedrock</text>
-<rect x="900" y="22" width="16" height="12" rx="3" fill="#efeafe" stroke="#6d4fd8"/>
-<text x="924" y="33" class="sh">LLM-powered agent</text>
-<rect x="900" y="42" width="16" height="12" rx="3" fill="#eef1f5" stroke="#5b6779"/>
-<text x="924" y="53" class="sh">Deterministic node</text>
-<rect x="900" y="62" width="16" height="12" rx="3" fill="#fdecea" stroke="#c0392b"/>
-<text x="924" y="73" class="sh">Escalation to human</text>
-<rect x="900" y="82" width="16" height="12" rx="3" fill="#fff6e0" stroke="#b7791f"/>
-<text x="924" y="93" class="sh">Tools &amp; data</text>
-<path d="M900 108 h28" fill="none" stroke="#4a5568" stroke-width="1.6" stroke-dasharray="6 4" marker-end="url(#arrow)"/>
-<text x="936" y="113" class="sh">conditional edge</text>
+<rect x="700" y="20" width="16" height="12" rx="3" fill="#e8f6ee" stroke="#2e8b57"/>
+<text x="724" y="31" class="sh">Customer / channel</text>
+<rect x="700" y="38" width="16" height="12" rx="3" fill="#fdeefd" stroke="#c026d3"/>
+<text x="724" y="49" class="sh">Container (service)</text>
+<rect x="700" y="56" width="16" height="12" rx="3" fill="#fff6e0" stroke="#b7791f"/>
+<text x="724" y="67" class="sh">Tools &amp; data: Postgres, jobs</text>
+<rect x="940" y="20" width="16" height="12" rx="3" fill="#2d3748" stroke="#2d3748"/>
+<text x="964" y="31" class="sh">External model API</text>
+<path d="M940 44 h28" fill="none" stroke="#4a5568" stroke-width="1.6" stroke-dasharray="6 4" marker-end="url(#arrow)"/>
+<text x="976" y="49" class="sh">conditional edge</text>
+<rect x="938" y="56" width="26" height="13" rx="6.5" fill="#e53e3e" stroke="#ffffff" stroke-width="1"/>
+<text x="951" y="65.5" font-size="8.5" font-weight="700" fill="#ffffff" text-anchor="middle">LLM</text>
+<text x="970" y="67" class="sh">calls the LLM</text>
 <rect x="40" y="100" width="230" height="76" rx="10" fill="#e8f6ee" stroke="#2e8b57" stroke-width="1.6"/>
 <text x="155.0" y="127.0" class="t">Incoming ticket</text>
 <text x="155.0" y="145.0" class="s">message + metadata</text>
@@ -24,12 +27,12 @@
 <text x="600.0" y="144.0" class="s">ticket, customer, preferences,</text>
 <text x="600.0" y="160.0" class="s">past tickets (long-term memory)</text>
 <path d="M600 169 V196" fill="none" stroke="#4a5568" stroke-width="1.6" marker-end="url(#arrow)"/>
-<rect x="480" y="200" width="240" height="64" rx="10" fill="#efeafe" stroke="#6d4fd8" stroke-width="1.6"/>
+<rect x="480" y="200" width="240" height="64" rx="10" fill="#e6f7f5" stroke="#2c7a7b" stroke-width="1.6"/>
 <text x="600.0" y="221.0" class="t">classifier</text>
 <text x="600.0" y="239.0" class="s">issue type, urgency, sentiment,</text>
 <text x="600.0" y="255.0" class="s">language, confidence</text>
 <path d="M600 264 V291" fill="none" stroke="#4a5568" stroke-width="1.6" marker-end="url(#arrow)"/>
-<rect x="480" y="295" width="240" height="64" rx="10" fill="#eef1f5" stroke="#5b6779" stroke-width="1.6"/>
+<rect x="480" y="295" width="240" height="64" rx="10" fill="#efeafe" stroke="#6d4fd8" stroke-width="1.6"/>
 <text x="600.0" y="316.0" class="t">supervisor</text>
 <text x="600.0" y="334.0" class="s">identify customer +</text>
 <text x="600.0" y="350.0" class="s">rule-based routing</text>
@@ -39,11 +42,11 @@
 <path d="M500 380 V412" fill="none" stroke="#4a5568" stroke-width="1.6" stroke-dasharray="6 4" marker-end="url(#arrow)"/>
 <path d="M780 380 V412" fill="none" stroke="#4a5568" stroke-width="1.6" stroke-dasharray="6 4" marker-end="url(#arrow)"/>
 <path d="M1020 380 V412" fill="none" stroke="#4a5568" stroke-width="1.6" stroke-dasharray="6 4" marker-end="url(#arrow)"/>
-<rect x="140" y="415" width="200" height="70" rx="10" fill="#efeafe" stroke="#6d4fd8" stroke-width="1.6"/>
+<rect x="140" y="415" width="200" height="70" rx="10" fill="#e6f0fb" stroke="#2b6cb0" stroke-width="1.6"/>
 <text x="240.0" y="439.0" class="t">knowledge_agent</text>
 <text x="240.0" y="457.0" class="s">RAG over knowledge base</text>
 <text x="240.0" y="473.0" class="s">how-to &amp; policy</text>
-<rect x="400" y="415" width="200" height="70" rx="10" fill="#efeafe" stroke="#6d4fd8" stroke-width="1.6"/>
+<rect x="400" y="415" width="200" height="70" rx="10" fill="#f5ebe3" stroke="#8b5a3c" stroke-width="1.6"/>
 <text x="500.0" y="439.0" class="t">account_agent</text>
 <text x="500.0" y="457.0" class="s">create_agent + CultPass tools</text>
 <text x="500.0" y="473.0" class="s">data &amp; actions</text>
@@ -51,21 +54,21 @@
 <text x="780.0" y="439.0" class="t">escalation_agent</text>
 <text x="780.0" y="457.0" class="s">handoff note + reply</text>
 <text x="780.0" y="473.0" class="s">team &amp; priority</text>
-<rect x="920" y="415" width="200" height="70" rx="10" fill="#eef1f5" stroke="#5b6779" stroke-width="1.6"/>
+<rect x="920" y="415" width="200" height="70" rx="10" fill="#efeafe" stroke="#6d4fd8" stroke-width="1.6"/>
 <text x="1020.0" y="439.0" class="t">request_info</text>
 <text x="1020.0" y="457.0" class="s">ask guest for email</text>
 <text x="1020.0" y="473.0" class="s">then continue thread</text>
 <text x="790" y="372" class="l" text-anchor="middle">human asked · critical · blocked · repeat · low confidence</text>
 <path d="M240 485 V530 H308" fill="none" stroke="#4a5568" stroke-width="1.6" marker-end="url(#arrow)"/>
 <path d="M500 485 V518 H432" fill="none" stroke="#4a5568" stroke-width="1.6" marker-end="url(#arrow)"/>
-<rect x="310" y="505" width="120" height="50" rx="10" fill="#efeafe" stroke="#6d4fd8" stroke-width="1.6"/>
+<rect x="310" y="505" width="120" height="50" rx="10" fill="#ffe8d6" stroke="#c05621" stroke-width="1.6"/>
 <text x="370.0" y="535.0" class="t">quality_gate</text>
 <text x="360" y="600" class="l" text-anchor="end">confidence ≥ 0.7, grounded, policy OK?</text>
 <path d="M430 545 H640 V450 H676" fill="none" stroke="#4a5568" stroke-width="1.6" stroke-dasharray="6 4" marker-end="url(#arrow)"/>
 <text x="648" y="505" class="l" text-anchor="start">no → escalate</text>
 <path d="M370 555 V632" fill="none" stroke="#4a5568" stroke-width="1.6" stroke-dasharray="6 4" marker-end="url(#arrow)"/>
 <text x="378" y="612" class="l" text-anchor="start">yes</text>
-<rect x="290" y="636" width="160" height="50" rx="10" fill="#eef1f5" stroke="#5b6779" stroke-width="1.6"/>
+<rect x="290" y="636" width="160" height="50" rx="10" fill="#ffe8d6" stroke="#c05621" stroke-width="1.6"/>
 <text x="370.0" y="666.0" class="t">approve</text>
 <path d="M370 686 V770 H456" fill="none" stroke="#4a5568" stroke-width="1.6" marker-end="url(#arrow)"/>
 <path d="M780 485 V742" fill="none" stroke="#4a5568" stroke-width="1.6" marker-end="url(#arrow)"/>
@@ -74,7 +77,7 @@
 <text x="650.0" y="770.0" class="t">finalize</text>
 <text x="650.0" y="788.0" class="s">send reply · log message · set ticket status</text>
 <path d="M650 801 V828" fill="none" stroke="#4a5568" stroke-width="1.6" marker-end="url(#arrow)"/>
-<rect x="530" y="832" width="240" height="56" rx="10" fill="#efeafe" stroke="#6d4fd8" stroke-width="1.6"/>
+<rect x="530" y="832" width="240" height="56" rx="10" fill="#eef1f5" stroke="#5b6779" stroke-width="1.6"/>
 <text x="650.0" y="857.0" class="t">write_memory</text>
 <text x="650.0" y="875.0" class="s">extract durable customer facts</text>
 <path d="M770 860 H876" fill="none" stroke="#4a5568" stroke-width="1.6" marker-end="url(#arrow)"/>
@@ -102,4 +105,31 @@
 <text x="1013.0" y="1014.0" class="s">MemorySaver · PostgresSaver (service/)</text>
 <text x="48" y="1052" class="sh">data/external/cultpass.db: users, subscriptions, experiences, reservations</text>
 <text x="48" y="1072" class="sh">data/core/udahub.db: accounts, users, tickets, ticket_metadata, ticket_messages, knowledge, customer_memory</text>
+<rect x="688.0" y="193.0" width="26" height="13" rx="6.5" fill="#e53e3e" stroke="#ffffff" stroke-width="1"/>
+<text x="701.0" y="202.5" font-size="8.5" font-weight="700" fill="#ffffff" text-anchor="middle">LLM</text>
+<rect x="308.0" y="408.0" width="26" height="13" rx="6.5" fill="#e53e3e" stroke="#ffffff" stroke-width="1"/>
+<text x="321.0" y="417.5" font-size="8.5" font-weight="700" fill="#ffffff" text-anchor="middle">LLM</text>
+<rect x="568.0" y="408.0" width="26" height="13" rx="6.5" fill="#e53e3e" stroke="#ffffff" stroke-width="1"/>
+<text x="581.0" y="417.5" font-size="8.5" font-weight="700" fill="#ffffff" text-anchor="middle">LLM</text>
+<rect x="848.0" y="408.0" width="26" height="13" rx="6.5" fill="#e53e3e" stroke="#ffffff" stroke-width="1"/>
+<text x="861.0" y="417.5" font-size="8.5" font-weight="700" fill="#ffffff" text-anchor="middle">LLM</text>
+<rect x="398.0" y="498.0" width="26" height="13" rx="6.5" fill="#e53e3e" stroke="#ffffff" stroke-width="1"/>
+<text x="411.0" y="507.5" font-size="8.5" font-weight="700" fill="#ffffff" text-anchor="middle">LLM</text>
+<rect x="738.0" y="825.0" width="26" height="13" rx="6.5" fill="#e53e3e" stroke="#ffffff" stroke-width="1"/>
+<text x="751.0" y="834.5" font-size="8.5" font-weight="700" fill="#ffffff" text-anchor="middle">LLM</text>
+<text x="40" y="1124" class="ph" style="font-size:12px">Agent type (agentic/agents):</text>
+<rect x="228" y="1114" width="16" height="11" rx="3" fill="#eef1f5" stroke="#5b6779"/>
+<text x="250" y="1124" class="sh" style="font-size:12px">memory_agent</text>
+<rect x="364" y="1114" width="16" height="11" rx="3" fill="#e6f7f5" stroke="#2c7a7b"/>
+<text x="386" y="1124" class="sh" style="font-size:12px">classifier</text>
+<rect x="500" y="1114" width="16" height="11" rx="3" fill="#efeafe" stroke="#6d4fd8"/>
+<text x="522" y="1124" class="sh" style="font-size:12px">supervisor</text>
+<rect x="636" y="1114" width="16" height="11" rx="3" fill="#e6f0fb" stroke="#2b6cb0"/>
+<text x="658" y="1124" class="sh" style="font-size:12px">knowledge_agent</text>
+<rect x="772" y="1114" width="16" height="11" rx="3" fill="#f5ebe3" stroke="#8b5a3c"/>
+<text x="794" y="1124" class="sh" style="font-size:12px">account_agent</text>
+<rect x="908" y="1114" width="16" height="11" rx="3" fill="#ffe8d6" stroke="#c05621"/>
+<text x="930" y="1124" class="sh" style="font-size:12px">quality_gate</text>
+<rect x="1044" y="1114" width="16" height="11" rx="3" fill="#fdecea" stroke="#c0392b"/>
+<text x="1066" y="1124" class="sh" style="font-size:12px">escalation_agent</text>
 </svg>
