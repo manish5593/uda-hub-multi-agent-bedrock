@@ -8,55 +8,75 @@ config:
     textColor: "#1a202c"
     nodeTextColor: "#1a202c"
     lineColor: "#718096"
+    edgeLabelBackground: "#ffffff"
     fontSize: "15px"
   flowchart:
     curve: linear
+    wrappingWidth: 400
 ---
-graph TD;
-	__start__([<p>__start__</p>]):::first
-	load_context(load_context)
-	classifier("classifier<br/><b style='color:#e53e3e'>LLM</b>")
-	supervisor(supervisor)
-	knowledge_agent("knowledge_agent<br/><b style='color:#e53e3e'>LLM</b>")
-	account_agent("account_agent<br/><b style='color:#e53e3e'>LLM</b>")
-	quality_gate("quality_gate<br/><b style='color:#e53e3e'>LLM</b>")
-	approve(approve)
-	escalation_agent("escalation_agent<br/><b style='color:#e53e3e'>LLM</b>")
-	request_info(request_info)
-	finalize(finalize)
-	write_memory("write_memory<br/><b style='color:#e53e3e'>LLM</b>")
-	__end__([<p>__end__</p>]):::last
-	__start__ --> load_context;
-	account_agent --> quality_gate;
-	approve --> finalize;
-	classifier --> supervisor;
-	escalation_agent --> finalize;
-	finalize --> write_memory;
-	knowledge_agent --> quality_gate;
-	load_context --> classifier;
-	quality_gate -.-> approve;
-	quality_gate -.-> escalation_agent;
-	request_info --> finalize;
-	supervisor -.-> account_agent;
-	supervisor -.-> escalation_agent;
-	supervisor -.-> knowledge_agent;
-	supervisor -.-> request_info;
-	write_memory --> __end__;
-	classDef default fill:#eef1f5,stroke:#5b6779,stroke-width:2px,color:#1a202c,font-weight:bold,font-size:15px,line-height:1.2
-	classDef first fill:#e8f6ee,stroke:#2e8b57,stroke-width:2px,color:#1a202c,font-weight:bold,font-size:15px
-	classDef last fill:#e8f6ee,stroke:#2e8b57,stroke-width:2px,color:#1a202c,font-weight:bold,font-size:15px
-	classDef memory_agent fill:#eef1f5,stroke:#5b6779,stroke-width:2px,color:#1a202c,font-weight:bold,font-size:15px
-	classDef classifier fill:#e6f7f5,stroke:#2c7a7b,stroke-width:2px,color:#1a202c,font-weight:bold,font-size:15px
-	classDef supervisor fill:#efeafe,stroke:#6d4fd8,stroke-width:2px,color:#1a202c,font-weight:bold,font-size:15px
-	classDef knowledge_agent fill:#e6f0fb,stroke:#2b6cb0,stroke-width:2px,color:#1a202c,font-weight:bold,font-size:15px
-	classDef account_agent fill:#f5ebe3,stroke:#8b5a3c,stroke-width:2px,color:#1a202c,font-weight:bold,font-size:15px
-	classDef quality_gate fill:#ffe8d6,stroke:#c05621,stroke-width:2px,color:#1a202c,font-weight:bold,font-size:15px
-	classDef escalation_agent fill:#fdecea,stroke:#c0392b,stroke-width:2px,color:#1a202c,font-weight:bold,font-size:15px
-	class load_context,finalize,write_memory memory_agent
-	class classifier classifier
-	class supervisor,request_info supervisor
-	class knowledge_agent knowledge_agent
-	class account_agent account_agent
-	class quality_gate,approve quality_gate
-	class escalation_agent escalation_agent
-	linkStyle default stroke:#718096,stroke-width:2.5px
+%% UDA-Hub agent workflow: the same graph, layout, labels and colours as architecture.svg.
+%% Hand-written. The nodes and edges match agentic/workflow.py; check them against
+%% orchestrator.get_graph().draw_mermaid() when the graph changes.
+flowchart TD
+    IN(["<span style='color:rgb(26,32,44)'>Incoming ticket<br/><small style='font-weight:normal;font-size:13px'>message + metadata<br/>customer · channel · urgency</small></span>"])
+    load_context("<span style='color:rgb(26,32,44)'>load_context<br/><small style='font-weight:normal;font-size:13px'>ticket, customer, preferences,<br/>past tickets (long-term memory)</small></span>")
+    classifier("<span style='color:rgb(26,32,44)'>classifier <b style='color:rgb(255,255,255);background-color:rgb(229,62,62);border-radius:8px;padding:1px 6px;font-size:11px'>LLM</b><br/><small style='font-weight:normal;font-size:13px'>issue type, urgency, sentiment,<br/>language, confidence</small></span>")
+    supervisor("<span style='color:rgb(26,32,44)'>supervisor<br/><small style='font-weight:normal;font-size:13px'>identify customer +<br/>rule-based routing</small></span>")
+    knowledge_agent("<span style='color:rgb(26,32,44)'>knowledge_agent <b style='color:rgb(255,255,255);background-color:rgb(229,62,62);border-radius:8px;padding:1px 6px;font-size:11px'>LLM</b><br/><small style='font-weight:normal;font-size:13px'>RAG over knowledge base<br/>how-to &amp; policy</small></span>")
+    account_agent("<span style='color:rgb(26,32,44)'>account_agent <b style='color:rgb(255,255,255);background-color:rgb(229,62,62);border-radius:8px;padding:1px 6px;font-size:11px'>LLM</b><br/><small style='font-weight:normal;font-size:13px'>create_agent + CultPass tools<br/>data &amp; actions</small></span>")
+    escalation_agent("<span style='color:rgb(26,32,44)'>escalation_agent <b style='color:rgb(255,255,255);background-color:rgb(229,62,62);border-radius:8px;padding:1px 6px;font-size:11px'>LLM</b><br/><small style='font-weight:normal;font-size:13px'>handoff note + reply<br/>team &amp; priority</small></span>")
+    request_info("<span style='color:rgb(26,32,44)'>request_info<br/><small style='font-weight:normal;font-size:13px'>ask guest for email<br/>then continue thread</small></span>")
+    quality_gate("<span style='color:rgb(26,32,44)'>quality_gate <b style='color:rgb(255,255,255);background-color:rgb(229,62,62);border-radius:8px;padding:1px 6px;font-size:11px'>LLM</b></span>")
+    approve("<span style='color:rgb(26,32,44)'>approve</span>")
+    finalize("<span style='color:rgb(26,32,44)'>finalize<br/><small style='font-weight:normal;font-size:13px'>send reply · log message · set ticket status</small></span>")
+    write_memory("<span style='color:rgb(26,32,44)'>write_memory <b style='color:rgb(255,255,255);background-color:rgb(229,62,62);border-radius:8px;padding:1px 6px;font-size:11px'>LLM</b><br/><small style='font-weight:normal;font-size:13px'>extract durable customer facts</small></span>")
+    OUT(["<span style='color:rgb(26,32,44)'>Reply to customer<br/><small style='font-weight:normal;font-size:13px'>resolved · awaiting_customer · escalated</small></span>"])
+
+    IN --> load_context --> classifier --> supervisor
+    supervisor -.-> knowledge_agent
+    supervisor -.-> account_agent
+    supervisor -.->|"<span style='color:rgb(26,32,44)'>human asked · critical<br/>blocked · repeat<br/>low confidence</span>"| escalation_agent
+    supervisor -.-> request_info
+    knowledge_agent --> quality_gate
+    account_agent --> quality_gate
+    quality_gate -.->|"<span style='color:rgb(26,32,44)'>yes: confidence ≥ 0.7,<br/>grounded, policy OK</span>"| approve
+    quality_gate -.->|"<span style='color:rgb(26,32,44)'>no → escalate</span>"| escalation_agent
+    approve --> finalize
+    escalation_agent --> finalize
+    request_info --> finalize
+    finalize --> write_memory --> OUT
+
+    subgraph TOOLS ["<span style='color:rgb(26,32,44)'>Tools#160;&#160;data#160;(agentic/tools,#160;data/)</span>"]
+        direction TB
+        knowledge_tools("<span style='color:rgb(26,32,44)'>knowledge_tools<br/><small style='font-weight:normal;font-size:13px'>embeddings (OpenAI, Bedrock or SageMaker)<br/>keyword fallback · knowledge_agent</small></span>")
+        cultpass_tools("<span style='color:rgb(26,32,44)'>cultpass_tools<br/><small style='font-weight:normal;font-size:13px'>bound to the ticket's customer<br/>book · cancel · subscription · refund</small></span>")
+        ticket_tools("<span style='color:rgb(26,32,44)'>ticket_tools<br/><small style='font-weight:normal;font-size:13px'>tickets, messages, metadata<br/>customer_memory (long-term)</small></span>")
+        checkpointer("<span style='color:rgb(26,32,44)'>Checkpointer<br/><small style='font-weight:normal;font-size:13px'>short-term memory per thread_id<br/>MemorySaver · PostgresSaver (service/)</small></span>")
+        knowledge_tools ~~~ ticket_tools
+        cultpass_tools ~~~ checkpointer
+    end
+    OUT ~~~ TOOLS
+
+    classDef default fill:#eef1f5,stroke:#5b6779,stroke-width:2px,color:#1a202c,font-weight:bold,font-size:15px
+    classDef customer fill:#e8f6ee,stroke:#2e8b57,stroke-width:2px,color:#1a202c,font-weight:bold,font-size:15px
+    classDef tools fill:#fff6e0,stroke:#b7791f,stroke-width:2px,color:#1a202c,font-weight:bold,font-size:15px
+    classDef memory_agent fill:#eef1f5,stroke:#5b6779,stroke-width:2px,color:#1a202c,font-weight:bold,font-size:15px
+    classDef classifier fill:#e6f7f5,stroke:#2c7a7b,stroke-width:2px,color:#1a202c,font-weight:bold,font-size:15px
+    classDef supervisor fill:#efeafe,stroke:#6d4fd8,stroke-width:2px,color:#1a202c,font-weight:bold,font-size:15px
+    classDef knowledge_agent fill:#e6f0fb,stroke:#2b6cb0,stroke-width:2px,color:#1a202c,font-weight:bold,font-size:15px
+    classDef account_agent fill:#f5ebe3,stroke:#8b5a3c,stroke-width:2px,color:#1a202c,font-weight:bold,font-size:15px
+    classDef quality_gate fill:#ffe8d6,stroke:#c05621,stroke-width:2px,color:#1a202c,font-weight:bold,font-size:15px
+    classDef escalation_agent fill:#fdecea,stroke:#c0392b,stroke-width:2px,color:#1a202c,font-weight:bold,font-size:15px
+    class IN,OUT customer
+    class knowledge_tools,cultpass_tools,ticket_tools,checkpointer tools
+    class load_context,finalize,write_memory memory_agent
+    class classifier classifier
+    class supervisor,request_info supervisor
+    class knowledge_agent knowledge_agent
+    class account_agent account_agent
+    class quality_gate,approve quality_gate
+    class escalation_agent escalation_agent
+    style TOOLS fill:#fffdf7,stroke:#b7791f,stroke-width:1.5px,stroke-dasharray:5 4,color:#1a202c
+    linkStyle default stroke:#718096,stroke-width:2.5px
+    %% links 16-18 only position the tools panel (two by two, below the reply): keep them invisible
+    linkStyle 16,17,18 stroke:none

@@ -19,7 +19,7 @@ Files in this folder:
 |---|---|
 | `architecture.svg` | The agent workflow above: every node by its name in the code, the decision paths, tools, data stores and memory |
 | `deployment.svg` | Where that workflow runs as microservices (see [Deployment](#deployment)): API gateway, services, Postgres, migrations, Prometheus and Grafana, and the model providers |
-| `workflow_graph.mmd` | Mermaid source exported from the compiled graph (`orchestrator.get_graph().draw_mermaid()`), with theme settings added at the top (dark text on every node, whatever the viewer's theme) and `classDef` colors added at the end (the same palette and meaning as `architecture.svg` and `deployment.svg`) and a red `LLM` label on the nodes that call the model; the colours show the agent type. Re-apply both if you regenerate the file. |
+| `workflow_graph.mmd` | The same diagram as `architecture.svg` in Mermaid, so GitHub and IDEs can render it: the same layout, node descriptions, route labels, tools panel and colours, with a red `LLM` badge on the nodes that call the model; the text is black. In labels, write colours as `rgb(...)`: Mermaid reads `#xxxxxx;` as a character code and breaks the style. It is hand-written; when the graph changes, check its nodes and edges against `orchestrator.get_graph().draw_mermaid()`. |
 | `README.md` | This design document |
 
 ## Architecture pattern: Supervisor
