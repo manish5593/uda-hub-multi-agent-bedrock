@@ -116,6 +116,9 @@ checked:
 | `key_points` | Points the reply must make, checked by the judge. Write them about meaning, not wording |
 | `faithful` | Set to `false` to skip the faithfulness check for that message |
 
+A turn's `text` may contain `{code}`: the runner replaces it with the last verification code the system sent,
+as a customer would copy it from their email (see `acct_guest_then_identified`).
+
 The values are checked against the code (routes, issue types, statuses, teams, tool names) when the file is
 loaded, so a typo fails straight away. The labels come from the routing rules in
 `agentic/agents/supervisor.py`, the knowledge base articles, and the demo customers:

@@ -74,7 +74,7 @@ names. Only the data calls change: they go to the service that owns the data.
 |---|---|---|---|
 | `load_context` | `memory_agent.py` | No | tickets service (ticket, messages, memories), cultpass service (customer profile) |
 | `classifier` | `classifier.py` | Yes | nothing |
-| `supervisor` | `supervisor.py` | No | cultpass service (find a guest by email), tickets service (link the ticket) |
+| `supervisor` | `supervisor.py` | No | cultpass service (find a guest by email), tickets service (link the ticket once they type the code sent to the email) |
 | `request_info` | `supervisor.py` | Only to translate | nothing |
 | `knowledge_agent` | `knowledge_agent.py` | Yes | knowledge service (RAG search) |
 | `account_agent` | `account_agent.py` | Yes (`create_agent` with tools) | cultpass service (account, bookings, subscription), tickets service (refund request note), knowledge service (search) |
@@ -157,11 +157,18 @@ curl -s localhost:8080/v1/tickets/T-100/messages -H 'X-API-Key: change-me-web-ch
 `status` is `resolved`, `awaiting_customer`, `escalated`, or `error` (the fallback reply was sent and the
 ticket was flagged for a human). The interactive API docs are at <http://localhost:8080/docs>.
 
-For demos, the gateway also serves a web chat at <http://localhost:8080/demo> (`gateway/demo.html`). Pick a
-demo customer or a guest, type or click a suggested message, and each reply shows its status and the team it
-was escalated to. The page holds no secret: enter a channel API key in the sidebar (or open
-`/demo?key=<key>` once), and it stays in that browser. Every message goes through the same authenticated
-endpoint as any other client.
+For demos, the gateway also serves a web chat at <http://localhost:8080/demo> (`gateway/demo.html`), with two
+ways to talk:
+
+- **Customer login:** email and password, then the code sent to the email. The chat then uses the customer's own
+  access token, with no API key, so the gateway decides who they are and they only see their own tickets.
+- **Channel personas** (Guest and the demo customers): the page acts as a trusted channel with an API key, which
+  vouches for the persona. A guest who types an email gets a code sent to it, and must type it back before
+  anything on that account is shown.
+
+Each reply shows its status and the team it was escalated to. The page holds no secret: the channel API key is
+typed in the sidebar (or passed once as `/demo?key=<key>`) and stays in that browser, and a customer's token stays
+in that tab. Every message goes through the same authenticated endpoints as any other client.
 
 ### Customer logins (JWT)
 
@@ -203,6 +210,13 @@ How it works:
 - **Customers only see their own tickets.** Another customer's ticket, or a guest ticket a channel started,
   answers `404` exactly like a missing one, so ticket ids can't be probed. Channels with an API key still see
   every ticket.
+- **Codes are emailed with Amazon SES** when `UDAHUB_EMAIL_PROVIDER=ses`, from the verified `UDAHUB_EMAIL_FROM`,
+  and are then never logged (`agentic/mailer.py`). By default they are written to the auth and agent logs
+  instead (`docker compose logs auth agent | grep -E 'Login code|Verification code'`). While an SES account is in
+  the sandbox, it only delivers to addresses verified in SES.
+- **An email typed in the chat is verified too.** A guest who types an email gets a code sent to it, and only the
+  right code links the ticket to that customer (`agentic/verification.py`, same limits as below, and a human
+  verifies identity after three codes on one ticket). The reply never says whether the email has an account.
 - **Sign-up is verified.** A 6-digit code goes to the CultPass email and expires after 10 minutes. It works
   once, and five wrong guesses burn it. Only an HMAC of the code is stored. A new code can be asked for after
   60 seconds.
@@ -418,8 +432,8 @@ UDAHUB_TEST_POSTGRES_URL=postgresql+psycopg://postgres:<password>@localhost:5432
   a proxy that serves only `/v1`.
 - Service-to-service calls use one shared token over the private Docker network, not mTLS or per-service
   identities.
-- Verification codes are written to the auth service's log, not emailed (`deliver_code` in
-  `auth_service/main.py`). Before real use, send them with an email provider and stop logging them.
+- Codes are emailed only with `UDAHUB_EMAIL_PROVIDER=ses`; otherwise they are written to the logs. With SES, set
+  `UDAHUB_EMAIL_LOG_FALLBACK=false` in production, so a failed email never puts a code in the logs.
 - Customer tokens can't be revoked before they expire: there is no logout, refresh token or deny-list, and
   there is no password reset yet. Keep `JWT_TTL_MINUTES` short.
 - The auth service and the gateway share one signing key (HS256). With RS256 or EdDSA, the gateway would hold

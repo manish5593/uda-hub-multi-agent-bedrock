@@ -34,12 +34,12 @@ One graph run handles one customer message:
 |---|---|---|
 | `load_context` | No | Finds or creates the ticket, identifies the customer (from the metadata, or as microservices from a verified login token), and recalls long-term memory: preferences and previous tickets |
 | `classifier` | Yes, structured output | Issue type (11 categories), urgency, sentiment, language, whether account action or a human is needed, confidence |
-| `supervisor` | No | Identifies a guest from an email in their message, then routes with plain-code rules |
+| `supervisor` | No | Identifies a guest from an email in their message once they type the code sent to it, then routes with plain-code rules |
 | `knowledge_agent` | Yes | RAG over the knowledge base, answering only from the retrieved articles |
 | `account_agent` | Yes, ReAct agent (`create_agent`) | CultPass tools bound to the current customer |
 | `quality_gate` | Yes, structured output, plus rules | Checks the draft's grounding and confidence against the evidence, then decides in code whether to send it or escalate |
 | `escalation_agent` | Yes, structured output | Picks the team and priority, writes a handoff note, and replies to the customer |
-| `request_info` | Only to translate | Asks a guest for their email, or asks what they need if the message was empty |
+| `request_info` | Only to translate | Asks a guest for their email, then for the code sent to it, or asks what they need if the message was empty |
 | `approve`, `finalize` | No | Send the reply, save it, and set the ticket's status |
 | `write_memory` | Yes, plus filters | Extracts lasting facts from the customer's own messages |
 
@@ -144,6 +144,13 @@ for them identity is something they proved, not something they typed:
   agents, tools or rules changed.
 - **Customers only see their own tickets.** Another customer's ticket, or a guest ticket a channel started, is a
   `404` like a missing one, so ticket ids can't be probed.
+- **A typed email needs the code sent to it.** In any chat, a guest who types an email gets a 6-digit code sent
+  there, and only the right code links the ticket to that customer. Before this, typing someone's email was enough
+  to read and cancel their bookings, which a live test of the demo page showed. The reply is the same whether or
+  not the email has an account, so the chat can't be used to find customers. The pending check is kept in the
+  ticket's checkpointed state as an HMAC, so it works the same in the notebooks and the agent service.
+- **Codes are emailed with Amazon SES** (`agentic/mailer.py`), or logged for demos. With SES a code is never
+  logged; the sandbox only delivers to verified addresses.
 - **Channels keep their API keys** and still see every ticket. Sign-up and login are rate-limited per client IP,
   and each customer has their own request budget.
 
@@ -224,7 +231,7 @@ Results from the committed run of notebook 03 against the real model:
 |---|---|---|---|
 | 1 | Guest asks what a subscription includes | knowledge agent | Answered from the subscription and tiers articles |
 | 2 | Cathy lists her reservations, then says "cancel that one" | account agent | Looked up, then cancelled on the follow-up |
-| 3 | Guest asks to book, then gives their email | request_info → account agent | Identified as Bob, who already has that booking |
+| 3 | Guest asks to book, gives their email, then the code sent to it | request_info → code verified → account agent | Identified as Bob only after the code; he already has that booking |
 | 4 | Blocked customer can't log in | escalation | Trust & Safety, without revealing why the account is blocked |
 | 5 | Customer charged twice | account agent → `request_refund` | Escalated to billing for approval |
 | 6 | Login still failing after a reset | escalation (repeat issue) | Technical support |
@@ -236,7 +243,7 @@ Results from the committed run of notebook 03 against the real model:
 | 12 | Frank says he loves outdoor activities | account agent → `recommend_experiences` | The two outdoor experiences; the preference was stored |
 | 13 | Frank asks for recommendations in a new session | account agent → `recommend_experiences` | Preference recalled from the database; the same two suggested |
 
-Across the run there were 9 resolved, 1 waiting on the customer, and 6 escalated, each escalation to the
+Across the run there were 9 resolved, 2 waiting on the customer, and 6 escalated, each escalation to the
 appropriate team. The 5 edge cases are an empty message, gibberish, an unknown customer, an unknown account, and
 a simulated LLM outage. All were handled without a crash. The model's wording varies between runs; the last two fixes in section 6
 made the cancellation check and Frank's first recommendation consistent as well.
@@ -370,6 +377,12 @@ cases, then the full evaluation:
 | **"Did my cancellation go through?" was answered from the conversation.** The agent repeated what it said earlier without checking, the gate saw no evidence for it, and the ticket was escalated. Found by re-running notebook 03. | The agent checks the account's current state with a tool before confirming it: earlier messages say what was done then, not what is true now. 5 of 5 targeted runs then checked and resolved it. |
 | **The judge flagged correct replies.** It counted "you might enjoy" as a claim, didn't know what `already_booked` meant, and flagged sentences an article gives as its suggested phrasing. | The judge's prompt covers each, and it sees the customer's stored preferences. Each flag was checked against the evidence first: every one was a correct reply. |
 
+Trying the demo page as a customer found this:
+
+| Problem found | Fix |
+|---|---|
+| **Typing someone's email was enough to act on their account.** On the demo page, a guest typed a customer's email and the agent cancelled that customer's booking: the supervisor linked the ticket to whoever owned the email. Login and MFA protected the API, but not this path. Found by trying the demo as a customer. | A typed email now gets a code sent to it, and only the right code links the ticket. The reply is the same for any email, wrong codes are limited, and a human verifies identity after three codes. Replayed through the gateway afterwards: a guessed code was refused and the booking untouched; the real code continued the request. |
+
 ## 7. Lessons
 
 - **Move decisions with consequences out of the prompt.** Routing, escalation policy, id validation and memory
@@ -395,6 +408,9 @@ cases, then the full evaluation:
   didn't.
 - **Read a failure before fixing it.** Several evaluation failures were the judge's mistakes, not the agent's.
   Fixing the agent for them would have made it worse.
+- **Use the product as a customer would.** Login and MFA were tested endpoint by endpoint, but trying the demo page
+  as a customer showed that a typed email still bypassed them. Every way in has to prove identity, not just the
+  newest one.
 - **Optional features must be off without configuration.** Tracing and the extra Compose profiles change nothing
   unless they are configured, so the notebooks, the tests and the default stack keep working.
 
@@ -421,10 +437,12 @@ cases, then the full evaluation:
   per embedding model because it needs a fixed vector dimension.
 - **The gateway's rate limits are per replica.** They are kept in memory; with several gateway replicas they
   would need Redis or Valkey.
-- **Logins are demo-grade in three ways.** Sign-up and login codes are written to the auth service's log instead
-  of emailed, so the second step proves nothing until a real email provider replaces `deliver_code`. Tokens can't be revoked before they expire (no logout, refresh token or password reset). And the auth
-  service and the gateway share one HS256 key, so the gateway could create tokens; RS256 or EdDSA would give it
-  only a public key.
+- **Logins are demo-grade in three ways.** Codes are logged unless SES is configured, and the SES account is in
+  the sandbox, so only verified addresses receive them. Tokens can't be revoked before they expire (no logout,
+  refresh token or password reset). And the auth service and the gateway share one HS256 key, so the gateway
+  could create tokens; RS256 or EdDSA would give it only a public key.
+- **Trusted channels are still trusted.** A channel with an API key can name the customer in the metadata
+  without a code, as in the original design. The demo page's personas use this; its login does not.
 - **Single platform.** Knowledge search already works per account, but the account tools are CultPass-specific.
 
 ## 9. Repository

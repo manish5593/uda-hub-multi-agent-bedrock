@@ -55,13 +55,13 @@ Why Supervisor rather than the alternatives:
 |---|---|---|
 | `load_context` | deterministic | Resolves the ticket from `thread_id`, creating it in `udahub.db` if it doesn't exist yet. It identifies the customer from metadata (`external_user_id` or `email`), stores the inbound message, and recalls long-term memory. It also resets the per-turn fields. |
 | `classifier` | LLM, structured output | Produces a `TicketClassification` with issue type (11 categories), urgency, sentiment, whether account action is needed, whether a human was requested, any email mentioned, language and confidence. Recommendations and availability questions count as account work, because they need the real catalog. |
-| `supervisor` | deterministic | Links a guest ticket to a customer when the classifier found their email. It then applies the routing rules below. The LLM classifies, but the routing itself stays auditable and testable code. |
+| `supervisor` | deterministic | When a guest types an email, sends a 6-digit code to it and links the ticket to that customer only once the right code comes back (`agentic/verification.py`). It then applies the routing rules below. The LLM classifies, but the routing itself stays auditable and testable code. |
 | `knowledge_agent` | RAG | Retrieves the top 3 KB articles for the account. With no relevant article above the score threshold, it produces no draft and the ticket escalates. Otherwise it answers grounded in those articles, in the customer's language. |
 | `account_agent` | ReAct agent (`create_agent`) | Uses CultPass tools **bound to the current customer**: account, reservations, experience search, booking, cancellation, subscription changes, refund requests and KB search. Booking and cancellation only accept ids that a lookup returned in the same turn. It recommends with `recommend_experiences`, which returns only bookable experiences that fit the customer's stored preferences, and asks a clarifying question when the request is ambiguous. Ids in its draft are checked against the ids the tools returned. |
 | `quality_gate` | LLM, structured output, plus rules | Scores the draft against the evidence (the customer's account and stored preferences, articles, tool results) for confidence, grounding and whether the evidence answers the question. It reports whether policy requires a human and whether the customer says the steps already failed; code combines those into `needs_human`. A draft with no question mark can't be waiting on the customer. `should_escalate` then decides deterministically. |
 | `approve` | deterministic | Runs when the quality gate passes the draft, and makes the draft the reply. |
 | `escalation_agent` | LLM, structured output | Picks the team and priority, writes a handoff note (stored as a `system` ticket message) and an empathetic reply. It never reveals block reasons and never promises refunds. |
-| `request_info` | deterministic | Asks the customer to identify themselves and keeps the ticket open (`awaiting_customer`). |
+| `request_info` | deterministic | Asks the customer to identify themselves (their email, then the code sent to it) and keeps the ticket open (`awaiting_customer`). |
 | `finalize` | deterministic | Appends the reply to the conversation, persists it, and updates the ticket's status, issue type and tags. |
 | `write_memory` | LLM, structured output, plus filters | Extracts durable preferences, personal facts and reported issues as third-person summaries. Code then drops reservation state and one-off requests and skips duplicates. Secrets and payment data are never stored. |
 
@@ -73,7 +73,7 @@ One graph run handles one customer message. Each node reads the shared state and
 |---|---|---|---|
 | 1 | `load_context` | `messages`, `metadata`, `thread_id` | `ticket_id`, `customer`, `memories`, `prior_tickets`, `ticket_history`, `ticket_status`, `ticket_issue_type`. It also resets the per-turn fields and saves the customer's message to `udahub.db`. |
 | 2 | `classifier` | conversation, customer context | `classification`: issue type, urgency, sentiment, language, whether account action or a human is needed, any email, confidence |
-| 3 | `supervisor` | `classification`, `customer`, `prior_tickets`, `ticket_status`, `metadata.urgency` | `route`, `route_reason`. A guest is linked to their account if the classifier found their email. |
+| 3 | `supervisor` | `classification`, `customer`, `prior_tickets`, `ticket_status`, `metadata.urgency` | `route`, `route_reason`, `pending_verification`. A guest who typed an email is sent a code, and linked to their account once they type it back. |
 | 4a | `knowledge_agent` | `classification`, conversation, customer context | `knowledge` (retrieved articles), `draft_response` |
 | 4b | `account_agent` | conversation, customer context | `actions_taken` (every tool call and result), `draft_response` |
 | 4c | `request_info` | `classification` | `final_response` (asks for the customer's email, in their language) |
@@ -157,6 +157,7 @@ Each decision with real consequences is enforced in code rather than left to a p
 | Risk | Safeguard | Where |
 |---|---|---|
 | Acting on another customer's account | Tools have the customer id bound in, and ownership is checked | `build_account_tools`, `cancel_reservation` |
+| Someone typing another customer's email in the chat | The email alone identifies nobody: a 6-digit code goes to it, and only the right code links the ticket. The reply is the same whether or not the email has an account. Codes expire after 10 minutes, five wrong guesses burn one, and after three codes on a ticket a human verifies identity | `supervise`, `agentic/verification.py` |
 | Acting on a guessed id | Booking and cancellation refuse ids that no lookup returned in the same turn | `build_account_tools` |
 | Breaking business rules | Blocked accounts, subscription status, tier, slots, quota and double booking are checked before every change | `reserve_experience`, `manage_subscription` |
 | A tool failure crashing the run | Unexpected tool errors are caught and returned to the agent as a structured error | `_safe` in `cultpass_tools.py` |
@@ -252,7 +253,8 @@ messages only.
 | Known customer (id or email in metadata) | The account, subscription, preferences and past tickets are loaded before classification |
 | Unknown customer, how-to or policy question | Answered from the knowledge base; nothing is stored about them |
 | Unknown customer who needs an account action | `request_info` asks for their email, and the ticket waits (`awaiting_customer`) |
-| Customer who writes their email in the message | The supervisor finds the account, links the ticket to it, and continues |
+| Customer who writes their email in the message | A 6-digit code is sent to that email (`request_info` says so, without revealing whether the email has an account). The customer types the code, the ticket is linked to their account, and their request continues |
+| Wrong, expired or too many codes | A wrong code asks again; five wrong guesses or an expired code ask for the email again; a third code on the same ticket goes to a human for identity verification |
 | Follow-up on the same ticket | The checkpointer supplies the earlier conversation, so "cancel *that one*" works |
 | Ticket that already exists in `udahub.db` | Its earlier messages are loaded as history |
 | Problem the customer reported before | Escalated straight away as a repeat issue |

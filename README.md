@@ -42,7 +42,7 @@ microservices, a customer who logged in is identified by their access token inst
 | `supervisor` | No | Identifies the customer and routes the ticket with auditable rules. Human requests, legal or critical issues, blocked accounts and repeat problems go straight to `escalation_agent` |
 | `knowledge_agent` | Yes | Answers from the knowledge base with RAG |
 | `account_agent` | Yes | Uses CultPass tools (reservations, subscription, refund requests) scoped to the customer, which only accept ids it looked up |
-| `request_info` | Only to translate | Asks a guest for their email when an account action is needed |
+| `request_info` | Only to translate | Asks a guest for their email when an account action is needed, then for the code sent to it |
 | `quality_gate` | Yes | Checks the draft's confidence and grounding; code then sends it (`approve`) or escalates it |
 | `escalation_agent` | Yes | Hands off to the right human team with a summary |
 | `finalize` | No | Sends the reply and sets the ticket's status |
@@ -64,7 +64,8 @@ The same workflow, with the same nodes, prompts, tools and rules, runs in two wa
   in its own Postgres database, and the knowledge service keeps the article embeddings there with pgvector. Channel integrations call the gateway with an API key, and customers can sign
   up and log in through the auth service: their JWT access token decides who they are, and they only see
   their own tickets. Prometheus and Grafana show traffic and support outcomes, and Langfuse
-  traces every model and tool call. A web chat at `/demo` is for trying it in a browser.
+  traces every model and tool call. A web chat at `/demo` is for trying it in a browser, as a logged-in customer
+  or through a channel. One-time codes are emailed with Amazon SES, or logged for demos.
 
 ![UDA-Hub deployment as microservices](design/deployment.svg)
 
@@ -185,7 +186,7 @@ password, and log in in two steps, the password and then a code emailed to them,
 
 ```bash
 curl -s localhost:8080/v1/auth/register/start -H 'Content-Type: application/json' -d '{"email": "cathy.bloom@florals.org"}'
-docker compose logs auth | grep 'Verification code'     # the demo logs the code instead of emailing it
+docker compose logs auth | grep 'Verification code'     # logged, unless emailed with SES (UDAHUB_EMAIL_PROVIDER=ses)
 curl -s localhost:8080/v1/auth/register/complete -H 'Content-Type: application/json' \
   -d '{"email": "cathy.bloom@florals.org", "code": "123456", "password": "Florals-2026-ok"}'
 curl -s localhost:8080/v1/auth/login -H 'Content-Type: application/json' \
@@ -198,7 +199,8 @@ curl -s localhost:8080/v1/auth/login/verify -H 'Content-Type: application/json' 
 They then send `Authorization: Bearer <token>` instead of `X-API-Key`. The token, not the message metadata, says
 who the customer is, and they can only see and continue their own tickets. Channel integrations keep using API
 keys. Passwords are stored as bcrypt hashes, a stolen password alone can't log in, and repeated wrong passwords or
-codes lock the login. See
+codes lock the login. The demo page has the same login, and a guest who types an email in any chat must type the
+code sent to it before anything on that account is shown. See
 [`service/README.md`](service/README.md#customer-logins-jwt) for the details and the limitations.
 
 ### Tracing with Langfuse (optional)
@@ -260,7 +262,8 @@ UDAHUB_EVAL_JUDGE_MODEL=gpt-4o python -m evals.run    # a stronger judge, as in 
   - a RAG resolution
   - a low-confidence answer that gets escalated
   - a blocked customer who is escalated straight away
-  - a multi-turn guest who is identified by email, with short-term and long-term memory recall
+  - a multi-turn guest who proves their email with the code sent to it, with short-term and long-term memory recall;
+    a typed email alone identifies nobody, and the reply doesn't say whether the email has an account
   - a refund request that forces escalation and stores a new memory
   - a memory about reservation state that is filtered out before it reaches the database
   - a memory writer that only sees the customer's messages, never the assistant's replies
@@ -290,7 +293,7 @@ committed in `solution/`.
 |---|---|---|---|---|
 | 1 | Guest asks what a subscription includes and whether premium events cost extra | classifier → knowledge agent (top article scored 0.78) | Resolved with an answer grounded in the subscription and tiers articles | None (guest) |
 | 2 | Cathy asks about her reservations, then says "cancel that one" | account agent: `get_my_reservations`, then `cancel_my_reservation` | Resolved. The follow-up relied on short-term memory, and the reservation was cancelled with the credit returned | Cancellation memory dropped by the filter |
-| 3 | Guest asks to book Samba Night, then gives their email | request_info → customer identified → account agent: `find_experiences` | Resolved. The search result said Bob already had that booking, so the agent told him instead of trying to book it again | None (no duplicate of his stored preference) |
+| 3 | Guest asks to book Samba Night, then gives their email, then the code sent to it | request_info (email) → request_info (code sent) → code verified, Bob identified → account agent: `get_my_reservations`, `find_experiences` | Resolved. The search result said Bob already had that booking, so the agent told him instead of trying to book it again | None (no duplicate of his stored preference) |
 | 4 | Alice, whose account is blocked, can't log in | supervisor → escalation agent | Escalated to Trust & Safety (high priority) without revealing the reason for the block | Login issue recorded |
 | 5 | Frank was charged twice | account agent: `request_refund` | Escalated to billing for support-lead approval, with no refund amount or timeline promised | Double charge and refund request recorded |
 | 6 | Bob still can't log in after a password reset | supervisor → escalation agent (repeat issue: his previous ticket was a login problem) | Escalated to technical support | Login issue recorded |

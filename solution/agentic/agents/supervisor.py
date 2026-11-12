@@ -173,6 +173,12 @@ REQUEST_INFO_MESSAGES = {
 }
 
 
+# For the trace: "[request_info] asked customer <...>"
+ASKED = {"code_sent": "for the code sent to their email", "code_reminder": "again for the code sent to their email",
+         "code_wrong": "to retry the code (wrong code)", "code_burnt": "for their email again (code burnt)",
+         "code_expired": "for their email again (code expired)"}
+
+
 def request_info(state: dict) -> dict:
     """Ask the customer for the information needed to continue (keeps the ticket open)."""
     classification = state.get("classification") or {}
@@ -184,7 +190,7 @@ def request_info(state: dict) -> dict:
         message = REQUEST_INFO_MESSAGES[kind].format(email=state.get("info_request_email") or "your email")
     language = classification.get("language", "English")
     asked = ("what they need help with" if classification.get("empty_message")
-             else kind.replace("_", " ") if kind else "to identify themselves")
+             else ASKED.get(kind, "to identify themselves"))
     return {"final_response": _in_customer_language(message, language),
             "trace": add_trace(state, f"[request_info] asked customer {asked} ({language})",
                                event="request_info", asked=asked, language=language)}

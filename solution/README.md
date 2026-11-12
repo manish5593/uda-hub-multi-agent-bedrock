@@ -24,7 +24,7 @@ the customer, yellow is tools and data, and dashed arrows are conditional routes
 | Node | What it does |
 |---|---|
 | `classifier` | Gives the ticket a structured classification: issue type, urgency, sentiment, language, whether account action is needed, and confidence |
-| `supervisor` | Identifies the customer (from metadata or an email in the conversation; as microservices, a logged-in customer is already identified by their access token) and routes the ticket with deterministic rules. It escalates before `knowledge_agent` or `account_agent` runs when the customer asks for a human, the issue is legal or critical, the classifier isn't confident, a blocked customer has an account issue, or the customer reports a problem they reported before |
+| `supervisor` | Identifies the customer (from metadata, or an email in the conversation once the customer types the code sent to it; as microservices, a logged-in customer is already identified by their access token) and routes the ticket with deterministic rules. It escalates before `knowledge_agent` or `account_agent` runs when the customer asks for a human, the issue is legal or critical, the classifier isn't confident, a blocked customer has an account issue, or the customer reports a problem they reported before |
 | `knowledge_agent` | Answers how-to and policy questions with RAG over the 18 knowledge base articles |
 | `account_agent` | A ReAct agent (LangChain `create_agent`) with CultPass tools bound to the current customer: account, reservations, booking, cancellation, subscription changes and refund requests. Booking and cancellation only accept ids that a lookup returned in the same turn |
 | `quality_gate` | Scores the draft reply for confidence and checks that it is backed by the articles or tool results. It escalates on low confidence (< 0.7), an unsupported draft, or a policy that needs a human (such as a refund) |
@@ -76,7 +76,7 @@ The demos make real changes: bookings and cancellations, plus new tickets and me
 |---|---|---|---|
 | 1 | Guest asks what a subscription includes | knowledge_agent (top article scored 0.78) → resolved | None (guest) |
 | 2 | Cathy asks about her reservations, then "cancel that one" | account_agent lists them, then cancels on the follow-up (short-term memory) → resolved | Cancellation dropped by the filter |
-| 3 | Guest asks to book Samba Night, then gives their email | request_info → Bob identified → account_agent's search shows he already has that booking, so it tells him | None (no duplicate preference) |
+| 3 | Guest asks to book Samba Night, gives their email, then the code sent to it | request_info → code sent → code verified, Bob identified → account_agent's search shows he already has that booking, so it tells him | None (no duplicate preference) |
 | 4 | Alice (blocked account) can't log in | supervisor → escalated to Trust & Safety without revealing the reason for the block | Login issue recorded |
 | 5 | Frank was charged twice | account_agent → `request_refund` → escalated to billing for support-lead approval | Refund request recorded |
 | 6 | Bob still can't log in | supervisor → escalated to technical support as a repeat issue (his previous ticket was a login problem) | Login issue recorded |
@@ -114,7 +114,8 @@ python -m pytest tests
   - RAG resolution
   - low-confidence escalation
   - a blocked customer
-  - multi-turn identification, recalling both short-term and long-term memory
+  - multi-turn identification through the emailed code (and wrong, expired and too many codes), recalling both
+    short-term and long-term memory
   - a refund request that forces escalation and writes a new memory
   - a reservation-state memory that is filtered out before it is stored
   - a memory writer that only sees the customer's messages
