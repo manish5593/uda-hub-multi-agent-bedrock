@@ -33,7 +33,10 @@ class TicketClassification(BaseModel):
     summary: str = Field(description="One-sentence summary of what the customer needs.")
     requires_account_action: bool = Field(
         description="True if resolving it needs the customer's account data or an action on "
-        "their account (look up/cancel/make reservations, check or change subscription, refunds)."
+        "their account (look up/cancel/make reservations, check or change subscription, refunds). "
+        "False for questions about how something works, what the rules are, or what to do when something "
+        "doesn't work, even when they are about the customer's own reservation, subscription or billing: "
+        "the knowledge base answers those without the customer's data."
     )
     human_requested: bool = Field(description="True if the customer explicitly asks for a human.")
     customer_email: Optional[str] = Field(
@@ -62,7 +65,9 @@ class ResolutionAssessment(BaseModel):
         "don't work."
     )
     awaiting_customer: bool = Field(
-        description="True if the draft asks the customer a necessary clarifying question."
+        description="True if the draft asks the customer a question they must answer before the request can "
+        "be completed (which reservation, which email, which date). False when the draft answers the request "
+        "and only offers more help, e.g. 'let me know if...' or 'if you'd like, I can...'."
     )
     reason: str = Field(description="Short justification for the decision.")
 

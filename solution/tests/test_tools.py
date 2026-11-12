@@ -92,7 +92,14 @@ def test_keyword_retrieval_finds_relevant_articles(monkeypatch):
 def test_routing_rules():
     assert route_ticket(GOOD, KNOWN, "open")[0] == "knowledge_agent"
     assert route_ticket({**GOOD, "issue_type": "reservation"}, KNOWN, "open")[0] == "account_agent"
-    assert route_ticket({**GOOD, "issue_type": "reservation"}, {"identified": False}, "open")[0] == "request_info"
+    guest = {"identified": False}
+    # A guest asking for an account action is asked who they are first...
+    action = {**GOOD, "issue_type": "reservation", "requires_account_action": True}
+    assert route_ticket(action, guest, "open")[0] == "request_info"
+    # ...but a guest asking how reservations, the subscription or billing work gets the knowledge base's answer
+    for issue in ("reservation", "subscription", "billing_refund"):
+        assert route_ticket({**GOOD, "issue_type": issue}, guest, "open") == (
+            "knowledge_agent", f"{issue} question that needs no account data")
     assert route_ticket({**GOOD, "human_requested": True}, KNOWN, "open")[0] == "escalation_agent"
     assert route_ticket({**GOOD, "urgency": "critical"}, KNOWN, "open")[0] == "escalation_agent"
     assert route_ticket({**GOOD, "confidence": 0.2}, KNOWN, "open")[0] == "escalation_agent"
@@ -100,6 +107,20 @@ def test_routing_rules():
     blocked = {"identified": True, "is_blocked": True}
     assert route_ticket({**GOOD, "issue_type": "login_access"}, blocked, "open")[0] == "escalation_agent"
     assert route_ticket(GOOD, blocked, "open")[0] == "knowledge_agent"  # general questions are still answered
+
+
+def test_gate_sees_the_account_the_agent_was_given():
+    """The account agent gets the customer's profile, quota included, in its context. An answer taken from
+    it must count as grounded, so the gate gets the same profile; a guest has none."""
+    from agentic.agents.quality_gate import gate_evidence
+    sub = {"tier": "premium", "monthly_quota": 2, "used_this_month": 1, "remaining_this_month": 1}
+    customer = {"identified": True, "name": "Frank Ocean", "email": "frank.ocean@seawaves.io",
+                "is_blocked": False, "subscription": sub}
+    evidence = gate_evidence({"customer": customer})
+    assert len(evidence) == 1 and evidence[0].startswith("Customer account")
+    assert '"remaining_this_month": 1' in evidence[0]
+    assert "frank.ocean@seawaves.io" not in evidence[0]  # only what the answer may rely on
+    assert gate_evidence({"customer": {"identified": False}}) == []
 
 
 def test_escalation_rules():

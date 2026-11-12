@@ -65,6 +65,11 @@ def route_ticket(classification: dict, customer: dict, ticket_status: str,
         return "escalation_agent", f"repeat {c.get('issue_type')} issue: the customer reported it before"
     needs_account = c.get("requires_account_action") or c.get("issue_type") in ACCOUNT_ISSUES
     if needs_account and not customer.get("identified"):
+        if not c.get("requires_account_action"):
+            # A guest asking how reservations, the subscription or billing work: the knowledge base answers
+            # that without their account, so don't ask who they are first. If no article answers it, the
+            # quality gate escalates as for any other knowledge question.
+            return "knowledge_agent", f"{c.get('issue_type')} question that needs no account data"
         return "request_info", "account action needed but customer is not identified"
     if needs_account:
         return "account_agent", f"{c.get('issue_type')} needs account data/actions"

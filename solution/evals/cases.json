@@ -233,12 +233,12 @@
   {
     "id": "acct_quota_left",
     "category": "account",
-    "description": "Frank (quota 2, one booking this month) asks how many he can still book",
+    "description": "Frank (quota 2, one booking this month) asks how many he can still book. The number may come from get_my_account or from the profile code loads from CultPass for every message; the key point checks it",
     "turns": [{
       "text": "How many more experiences can I book this month?",
       "metadata": {"email": "frank.ocean@seawaves.io"},
       "expect": {
-        "route": "account_agent", "status": "resolved", "tools_succeeded": ["get_my_account"],
+        "route": "account_agent", "status": "resolved",
         "key_points": ["Says Frank has 1 experience left to book this month"]
       }
     }]

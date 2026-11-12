@@ -11,7 +11,7 @@ from agentic.tools.cultpass_tools import ESCALATING_TOOLS
 from agentic.tools.knowledge_tools import format_articles
 
 GATE_PROMPT = """You review draft replies written by an AI support agent for CultPass before they are sent.
-Judge the draft against the evidence (knowledge base articles and tool results) only.
+Judge the draft against the evidence (the customer's account, knowledge base articles and tool results) only.
 - confidence: how sure you are that the draft correctly and fully addresses the customer's request.
 - grounded: false if the draft states facts, policies, steps or suggestions not supported by the evidence.
   Advice such as "check the venue's website" or "look at the event details" is NOT grounded unless an
@@ -25,7 +25,29 @@ Judge the draft against the evidence (knowledge base articles and tool results) 
   A draft that gives the documented steps and says the team can help *if they don't work* does NOT need a
   human yet: the customer should try the steps first.
 - awaiting_customer: true if the draft asks a clarifying question that is genuinely needed to proceed.
-  A good clarifying question is a valid outcome and deserves high confidence."""
+  A good clarifying question is a valid outcome and deserves high confidence. A draft that answers the
+  request and then offers more help ("feel free to ask", "if you'd like, I can...") is NOT awaiting the
+  customer: the request is done."""
+
+
+def gate_evidence(state: dict) -> list[str]:
+    """What the draft may rely on: the articles retrieved, the tool calls and their results, previous tickets,
+    and the customer's account as code loaded it from CultPass for this message (subscription, quota used
+    and remaining, blocked status). The account agent is given that profile too, so an answer taken from it
+    is grounded even when no tool was called."""
+    evidence = []
+    customer = state.get("customer") or {}
+    if customer.get("identified"):
+        account = {k: customer.get(k) for k in ("name", "is_blocked", "subscription")}
+        evidence.append("Customer account (loaded from CultPass for this message):\n"
+                        + json.dumps(account, indent=1, default=str))
+    if state.get("knowledge"):
+        evidence.append("Knowledge base:\n" + format_articles(state["knowledge"]))
+    if state.get("actions_taken"):
+        evidence.append("Tool calls and results:\n" + json.dumps(state["actions_taken"], indent=1, default=str))
+    if state.get("prior_tickets"):
+        evidence.append("Previous tickets:\n" + json.dumps(state["prior_tickets"], indent=1, default=str))
+    return evidence
 
 
 def assess_resolution(state: dict) -> dict:
@@ -40,14 +62,7 @@ def assess_resolution(state: dict) -> dict:
         return {"assessment": assessment,
                 "trace": add_trace(state, f"[quality_gate] {assessment['reason']}", event="assess", **assessment)}
 
-    evidence = []
-    if state.get("knowledge"):
-        evidence.append("Knowledge base:\n" + format_articles(state["knowledge"]))
-    if state.get("actions_taken"):
-        evidence.append("Tool calls and results:\n" + json.dumps(state["actions_taken"], indent=1, default=str))
-    if state.get("prior_tickets"):
-        evidence.append("Previous tickets:\n" + json.dumps(state["prior_tickets"], indent=1, default=str))
-
+    evidence = gate_evidence(state)
     result: ResolutionAssessment = get_llm().with_structured_output(ResolutionAssessment).invoke([
         SystemMessage(content=GATE_PROMPT),
         HumanMessage(content=f"Conversation:\n{conversation_text(state)}\n\n"
