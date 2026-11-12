@@ -459,3 +459,70 @@ def test_search_results_say_whether_the_customer_can_book():
     premium = [e for e in results if e["is_premium"]]
     assert premium and all(not e["can_book"] and "premium" in e["cannot_book_because"] for e in premium)
     assert any(e["can_book"] and "cannot_book_because" not in e for e in results)
+
+
+def test_wrong_ids_in_a_draft_are_corrected():
+    """The model once wrote 23e89 for a 6-character reservation id."""
+    from agentic.agents.account_agent import correct_ids
+    booking = [{"tool": "find_experiences", "args": {}, "result": [{"experience_id": "b0e4dd"}]},
+               {"tool": "book_experience", "args": {"experience_id": "b0e4dd"},
+                "result": {"success": True, "reservation_id": "23e89a"}}]
+    draft, fixed = correct_ids("Booked! Your reservation ID is 23e89.", booking)
+    assert draft == "Booked! Your reservation ID is 23e89a." and fixed == ["23e89 -> 23e89a"]
+    # Right ids, words that look like hex, and years are left alone
+    same = "Reservation 23e89a for b0e4dd at the cafe, 2026, decade ahead."
+    assert correct_ids(same, booking) == (same, [])
+    # No booking this turn: nothing to correct it to, so the draft is unchanged
+    lookup = booking[:1]
+    assert correct_ids("Your reservation ID is 23e89.", lookup) == ("Your reservation ID is 23e89.", [])
+
+
+class _ScriptedMatcher:
+    def __init__(self, matches):
+        self.matches = matches
+
+    def with_structured_output(self, schema):
+        return self
+
+    def invoke(self, messages):
+        from agentic.tools.recommendations import Match, Matches
+        return Matches(matches=[Match(**m) for m in self.matches])
+
+
+def test_recommendations_only_return_bookable_matches(monkeypatch):
+    from agentic.tools import recommendations
+    bob_prefs = ["(preference) Enjoys music and dance experiences, especially in Rio de Janeiro",
+                 "(issue_history) Reported a login problem."]
+    tools = {t.name: t for t in cp.build_account_tools(BOB, "t-rec", bob_prefs)}
+    catalog = {e["title"]: e for e in tools["find_experiences"].invoke({})}
+    # Bob has Samba Night and the Carnival tour booked already
+    samba, carnival, christ, walk = (catalog[t]["experience_id"] for t in (
+        "Samba Night at Lapa", "Carnival History Tour in Olinda", "Christ the Redeemer Experience",
+        "Pelourinho Colonial Walk"))
+    preference = "Enjoys music and dance experiences, especially in Rio de Janeiro"
+    monkeypatch.setattr(recommendations, "get_llm", lambda: _ScriptedMatcher([
+        {"experience_id": walk, "preference": preference, "why": "street music in Salvador"},
+        {"experience_id": samba, "preference": preference, "why": "samba"},          # already booked: not a candidate
+        {"experience_id": carnival, "preference": preference, "why": "carnival"},    # already booked: not a candidate
+        {"experience_id": christ, "preference": "Loves sightseeing", "why": "sight"},  # not a stored preference
+        {"experience_id": "zzz999", "preference": preference, "why": "made up"},      # not an experience
+    ]))
+    result = tools["recommend_experiences"].invoke({})
+    assert result["preferences"] == [preference]
+    assert [m["experience_id"] for m in result["matches"]] == [walk]
+    assert result["matches"][0]["fits_preference"] == preference and "note" not in result
+
+    # Nothing fits: the agent is told so, with nothing else to offer as a fit
+    monkeypatch.setattr(recommendations, "get_llm", lambda: _ScriptedMatcher([]))
+    empty = tools["recommend_experiences"].invoke({})
+    assert empty["matches"] == [] and "None of the experiences" in empty["note"]
+    assert 0 < len(empty["other_options"]) <= 3
+    assert all(o["can_book"] and o["fits_preference"] is None for o in empty["other_options"])
+    assert samba not in {o["experience_id"] for o in empty["other_options"]}
+
+
+def test_recommendations_without_preferences_list_bookable_options():
+    tools = {t.name: t for t in cp.build_account_tools(BOB, "t-rec", [])}
+    result = tools["recommend_experiences"].invoke({})
+    assert result["preferences"] == [] and "without saying they fit" in result["note"]
+    assert result["experiences"] and all(e["can_book"] for e in result["experiences"])

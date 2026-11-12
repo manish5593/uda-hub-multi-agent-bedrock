@@ -23,7 +23,7 @@ ISSUE_TYPES = set(get_args(IssueType))
 STATUSES = {"resolved", "awaiting_customer", "escalated", "error"}
 TEAMS = set(get_args(EscalationHandoff.model_fields["team"].annotation))
 TOOLS = {"get_my_account", "get_my_reservations", "find_experiences", "book_experience", "cancel_my_reservation",
-         "change_subscription", "request_refund", "search_knowledge_base"}
+         "change_subscription", "request_refund", "search_knowledge_base", "recommend_experiences"}
 CATEGORIES = Literal["knowledge", "not_covered", "account", "policy", "routing", "language", "safety"]
 
 

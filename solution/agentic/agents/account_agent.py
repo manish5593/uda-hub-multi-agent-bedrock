@@ -1,5 +1,6 @@
 """Account resolver: a ReAct agent that uses CultPass tools scoped to the current customer."""
 import json
+import re
 
 from langchain_core.messages import AIMessage, SystemMessage, ToolMessage
 from langchain.agents import create_agent
@@ -16,13 +17,11 @@ Rules:
 - Use the tools to check real account data before answering; never guess reservation ids, dates or quota.
 - Never invent ids. Get reservation ids from get_my_reservations and experience ids from find_experiences
   BEFORE calling book_experience or cancel_my_reservation.
-- For recommendations, search the catalog with find_experiences and suggest real upcoming experiences that
-  match the customer's known preferences (premium ones only if their tier allows it). The search matches
-  literal words, so for recommendations call find_experiences with no query (optionally a location) and choose
-  from the whole catalog yourself. Recommend only the 2-3 that genuinely match their preferences, with one line on
-  why each fits, naming a preference from the customer context; never attribute interests the context doesn't
-  list. Leave out ones that don't fit rather than listing everything. Never recommend one marked
-  already_booked; you can mention that they have it.
+- For recommendations, call recommend_experiences. It returns only experiences the customer can book that fit
+  a stored preference, each with the preference it fits. Recommend those (at most 3), saying which preference
+  each fits. If it returns no matches, say that nothing coming up matches their known interests, then offer
+  its other_options as alternatives, without saying they fit their taste. Use find_experiences when the customer
+  asks for something specific.
 - Look up policies with search_knowledge_base before explaining them (cancellation, refunds, quota...).
 - Each find_experiences result says whether the customer can_book it, and if not, why
   (cannot_book_because). Never offer or attempt a booking the result says they can't make; explain why.
@@ -60,10 +59,40 @@ def _actions(messages: list) -> list[dict]:
     return actions
 
 
+# Reservation and experience ids are 6 hex characters (uuid4 prefixes). A token counts as an id only if it
+# mixes digits and letters a-f, so words like "cafe" and years like "2026" never do.
+ID_LIKE = re.compile(r"\b(?=[0-9a-f]*\d)(?=[0-9a-f]*[a-f])[0-9a-f]{4,8}\b")
+
+
+def _ids_in(value) -> set[str]:
+    """Every reservation or experience id in a tool call's arguments or result."""
+    if isinstance(value, dict):
+        found = {str(v) for k, v in value.items() if k in ("reservation_id", "experience_id") and v}
+        return found.union(*(_ids_in(v) for v in value.values()))
+    if isinstance(value, list):
+        return set().union(*(_ids_in(v) for v in value))
+    return set()
+
+
+def correct_ids(draft: str, actions: list[dict]) -> tuple[str, list[str]]:
+    """Ids are copied by the model, which once wrote 23e89 for a 6-character reservation id. Every id-like
+    token in the draft must be one the tools returned. A wrong one is replaced when the right one is
+    unambiguous (the turn made exactly one booking); the replacements are returned for the trace."""
+    known = set().union(*(_ids_in(a.get("args")) | _ids_in(a.get("result")) for a in actions)) if actions else set()
+    booked = [a["result"]["reservation_id"] for a in actions
+              if a["tool"] == "book_experience" and isinstance(a.get("result"), dict) and a["result"].get("success")]
+    unknown = [t for t in dict.fromkeys(ID_LIKE.findall(draft)) if t not in known]
+    if not unknown or len(booked) != 1:
+        return draft, []
+    for token in unknown:
+        draft = re.sub(rf"\b{token}\b", booked[0], draft)
+    return draft, [f"{token} -> {booked[0]}" for token in unknown]
+
+
 def resolve_with_account_tools(state: dict) -> dict:
     customer = state["customer"]
     classification = state.get("classification", {})
-    tools = build_account_tools(customer["external_user_id"], state["ticket_id"])
+    tools = build_account_tools(customer["external_user_id"], state["ticket_id"], state.get("memories"))
     tools.append(build_knowledge_tool(customer["account_id"]))
 
     agent = create_agent(
@@ -86,8 +115,12 @@ def resolve_with_account_tools(state: dict) -> dict:
                                error="recursion_limit"),
         }
     actions = _actions(result["messages"])
+    draft, fixed = correct_ids(result["messages"][-1].content, actions)
+    if fixed:
+        state = {**state, "trace": add_trace(state, f"[account_agent] corrected ids in the draft: {fixed}",
+                                             event="correct_ids", fixed=fixed)}
     return {
-        "draft_response": result["messages"][-1].content,
+        "draft_response": draft,
         "actions_taken": actions,
         "resolver": "account_agent",
         "trace": add_trace(state, f"[account_agent] tools used: {[a['tool'] for a in actions]}", event="tools",

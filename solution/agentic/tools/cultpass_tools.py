@@ -258,7 +258,7 @@ def manage_subscription(user_id: str, action: str) -> dict:
 # LangChain tools bound to one customer + ticket
 # ---------------------------------------------------------------------------
 
-def build_account_tools(user_id: str, ticket_id: str) -> list[StructuredTool]:
+def build_account_tools(user_id: str, ticket_id: str, memories: Optional[list[str]] = None) -> list[StructuredTool]:
     """Return tools pre-bound to `user_id`, so the agent can only touch this account.
 
     The booking and cancellation tools only accept ids that a lookup tool returned earlier in
@@ -340,10 +340,29 @@ def build_account_tools(user_id: str, ticket_id: str) -> list[StructuredTool]:
             "note": "Refunds require support-lead approval; do not promise an amount or timeline.",
         }
 
+    def recommend_experiences(location: str = "") -> dict:
+        """Recommend experiences for the customer: the upcoming ones they can book that fit their stored preferences. Use this for any recommendation, instead of choosing from find_experiences yourself. `location` optionally limits it to a city or state."""
+        from agentic.tools.recommendations import match_preferences, stored_preferences
+        preferences = stored_preferences(memories)
+        candidates = [e for e in find_experiences(location=location) if e["can_book"]]
+        if not preferences:
+            return {"preferences": [], "experiences": candidates,
+                    "note": "No stored preferences: present a few options without saying they fit the customer's taste."}
+        matches = match_preferences(preferences, candidates)
+        result = {"preferences": preferences, "matches": matches}
+        if not matches:
+            # Still useful, and still honest: other options, labelled as not matching their taste
+            result["other_options"] = [{**e, "fits_preference": None} for e in candidates[:3]]
+            result["note"] = ("None of the experiences the customer can book fits their stored preferences. Say so "
+                              "plainly, then offer other_options as alternatives that are NOT based on their "
+                              "interests; never present any of them as a fit.")
+        return result
+
     funcs = [
         get_my_account,
         get_my_reservations,
         find_experiences,
+        recommend_experiences,
         book_experience,
         cancel_my_reservation,
         change_subscription,

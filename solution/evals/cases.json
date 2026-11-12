@@ -246,15 +246,16 @@
   {
     "id": "acct_recommendation",
     "category": "account",
-    "description": "Bob (likes music and dance in Rio, already booked Samba Night) asks for a recommendation",
+    "description": "Bob (likes music and dance in Rio, already booked Samba Night and the Carnival tour) asks for a recommendation. Nothing else he can book is music or dance, so the honest answer says so and offers other options without claiming they fit",
     "turns": [{
       "text": "Can you recommend something for me to do?",
       "metadata": {"email": "bob.stone@granite.com"},
       "expect": {
         "route": "account_agent", "status": ["resolved", "awaiting_customer"],
-        "tools_succeeded": ["find_experiences"], "tools_not_called": ["book_experience"],
+        "tools_succeeded": ["recommend_experiences"], "tools_not_called": ["book_experience"],
         "key_points": ["Recommends at least one experience from the CultPass catalog",
-                       "Does not suggest Samba Night at Lapa as something new to book (Bob already has it)"]
+                       "Does not suggest Samba Night at Lapa as something new to book (Bob already has it)",
+                       "Does not say an experience fits Bob's music and dance interests unless it involves music or dance"]
       }
     }]
   },

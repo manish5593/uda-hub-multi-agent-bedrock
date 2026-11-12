@@ -20,7 +20,8 @@ from agentic.tools.knowledge_tools import format_articles
 FAITHFULNESS_PROMPT = """You check replies written by an AI customer support agent for CultPass.
 List every factual claim in the reply that the evidence does not support: policies, prices, steps, dates,
 numbers, account details, or actions the reply says were taken. The evidence is the only source of truth.
-Do not count greetings, empathy, offers to help further, or questions to the customer as claims.
+Do not count greetings, empathy, offers to help further, questions to the customer, or hedged suggestions
+such as "you might enjoy" as claims.
 A claim the evidence contradicts is unsupported.
 In tool results, "already_booked": true on an experience means this customer has booked it, so a reply saying
 they already booked it (with that experience's date) is supported."""
