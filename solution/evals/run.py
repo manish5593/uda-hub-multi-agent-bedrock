@@ -11,7 +11,8 @@ Each run of a case starts from fresh copies of the demo databases (dates moved t
 conversation, so bookings and memories from one run never leak into another. The models are called for
 real: a full run is about 115 conversations and several hundred model calls.
 
-Writes results.json (every turn, every check) and report.md to evals/results/<UTC timestamp>/.
+Writes results.json (every turn, every check) and report.md to evals/results/<UTC timestamp>/, and
+results.partial.json after every run while it goes, so a stopped evaluation keeps the runs it finished.
 """
 import argparse
 import json
@@ -87,6 +88,11 @@ def run_case(case: Case, run: int, judge=llm_judge) -> dict:
                     "status": state.get("ticket_status"),
                     "team": (state.get("escalation") or {}).get("team"),
                     "tools": tool_calls(state), "error": state.get("error"),
+                    # Why the reply was sent or escalated, so a failure can be explained from the results
+                    "assessment": {k: (state.get("assessment") or {}).get(k) for k in
+                                   ("confidence", "grounded", "answered_by_evidence", "needs_human",
+                                    "awaiting_customer", "reason")} if state.get("assessment") else None,
+                    "escalation_reason": (state.get("escalation") or {}).get("reason"),
                     "seconds": round(seconds, 2), "checks": [c.to_dict() for c in checks],
                 })
         finally:
@@ -265,6 +271,7 @@ def main(argv=None) -> int:
     print(f"{len(cases)} cases x {args.runs} runs, model {config.LLM_PROVIDER}/{config.CHAT_MODEL}, "
           f"judge {llm_judge.judge_model_name() if judge else 'off'}")
 
+    out.mkdir(parents=True, exist_ok=True)
     records = []
     for case in cases:
         for run in range(1, args.runs + 1):
@@ -275,6 +282,9 @@ def main(argv=None) -> int:
             outcome = ("ERROR (fallback reply, not scored)" if record["errored"]
                        else "pass" if record["passed"] else "FAIL " + ", ".join(failed))
             print(f"  {case.id} run {run}: {outcome} ({seconds:.1f} s)", flush=True)
+            # Every finished run is kept even if the evaluation is stopped part way (e.g. by throttling)
+            (out / "results.partial.json").write_text(json.dumps({"runs": records}, indent=1, ensure_ascii=False,
+                                                                 default=str), encoding="utf-8")
 
     meta = {"date": started.strftime("%Y-%m-%d %H:%M UTC"), "provider": config.LLM_PROVIDER,
             "chat_model": config.CHAT_MODEL, "embedding_model": config.EMBEDDING_MODEL,
@@ -282,7 +292,7 @@ def main(argv=None) -> int:
             "cases": len(cases), "turns": sum(len(c.turns) for c in cases), "runs_per_case": args.runs,
             "commit": git_commit(), "cases_file": str(args.cases)}
     summary = summarize(cases, records)
-    out.mkdir(parents=True, exist_ok=True)
+    (out / "results.partial.json").unlink(missing_ok=True)
     (out / "results.json").write_text(json.dumps({"meta": meta, "summary": summary, "runs": records},
                                                  indent=1, ensure_ascii=False, default=str), encoding="utf-8")
     (out / "report.md").write_text(render_report(meta, summary, records), encoding="utf-8")

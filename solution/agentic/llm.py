@@ -21,13 +21,24 @@ def _bedrock_config():
                   read_timeout=120, connect_timeout=10)
 
 
+@lru_cache(maxsize=1)
+def _bedrock_rate_limiter():
+    """One limiter for every Bedrock chat model in this process, so all agents share the account's quota."""
+    if config.BEDROCK_REQUESTS_PER_MINUTE <= 0:
+        return None
+    from langchain_core.rate_limiters import InMemoryRateLimiter
+    return InMemoryRateLimiter(requests_per_second=config.BEDROCK_REQUESTS_PER_MINUTE / 60,
+                               check_every_n_seconds=0.1, max_bucket_size=2)
+
+
 @lru_cache(maxsize=None)
 def get_llm(temperature: float = 0.0) -> BaseChatModel:
     if config.LLM_PROVIDER == "bedrock":
         from langchain_aws import ChatBedrockConverse
         # The Converse API supports the tool calling and structured output the agents rely on
         return ChatBedrockConverse(model=config.CHAT_MODEL, region_name=config.AWS_REGION,
-                                   temperature=temperature, max_tokens=2048, config=_bedrock_config())
+                                   temperature=temperature, max_tokens=config.BEDROCK_MAX_TOKENS, config=_bedrock_config(),
+                                   rate_limiter=_bedrock_rate_limiter())
     from langchain_openai import ChatOpenAI
     return ChatOpenAI(model=config.CHAT_MODEL, temperature=temperature)
 

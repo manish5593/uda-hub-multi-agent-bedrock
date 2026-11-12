@@ -609,3 +609,36 @@ def test_codes_are_logged_by_default(monkeypatch, caplog):
     with caplog.at_level("INFO"):
         assert mailer.send_code("bob.stone@granite.com", "482913") is False
     assert "Verification code for bob.stone@granite.com: 482913" in caplog.text
+
+
+def test_bedrock_calls_share_one_rate_limiter_when_configured(monkeypatch):
+    from agentic import config, llm
+    llm._bedrock_rate_limiter.cache_clear()
+    monkeypatch.setattr(config, "BEDROCK_REQUESTS_PER_MINUTE", 0)
+    assert llm._bedrock_rate_limiter() is None                     # off by default
+    llm._bedrock_rate_limiter.cache_clear()
+    monkeypatch.setattr(config, "BEDROCK_REQUESTS_PER_MINUTE", 15)
+    limiter = llm._bedrock_rate_limiter()
+    assert limiter is llm._bedrock_rate_limiter()                  # every agent shares the account's quota
+    assert abs(limiter.requests_per_second - 0.25) < 1e-9
+    llm._bedrock_rate_limiter.cache_clear()
+
+
+def test_booking_and_cancelling_report_the_quota_left():
+    """A reply saying how many experiences are left was correct but unsupported: no tool result had the number."""
+    cathy = "88382b"
+    before = cp.get_customer_profile(cathy)["subscription"]["remaining_this_month"]
+    masp = next(e for e in cp.search_experiences("MASP"))
+    booked = cp.reserve_experience(cathy, masp["experience_id"])
+    assert booked["success"] and booked["remaining_this_month"] == before - 1
+    assert booked["monthly_quota"] == cp.get_customer_profile(cathy)["subscription"]["monthly_quota"]
+    cancelled = cp.cancel_reservation(cathy, booked["reservation_id"])
+    assert cancelled["success"] and cancelled["remaining_this_month"] == before
+    assert cp.get_customer_profile(cathy)["subscription"]["remaining_this_month"] == before
+
+
+def test_a_neighbourhood_given_as_the_location_is_found():
+    """"Samba at Lapa" searched with location "Lapa" found nothing: Lapa is in the title, not the location."""
+    titles = [e["title"] for e in cp.search_experiences("samba", location="Lapa")]
+    assert titles == ["Samba Night at Lapa"]
+    assert {e["title"] for e in cp.search_experiences(location="Rio de Janeiro")} >= {"Samba Night at Lapa"}

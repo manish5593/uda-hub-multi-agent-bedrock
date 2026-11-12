@@ -10,6 +10,7 @@ from datetime import datetime
 from typing import Literal, Optional
 
 from langchain_core.tools import StructuredTool
+from sqlalchemy import or_
 
 from agentic.remote.http import remote
 from agentic.tools.db import cultpass_engine, session_scope
@@ -47,6 +48,13 @@ def _used_this_month(session, user_id: str) -> int:
         )
         .count()
     )
+
+
+def _quota_after(session, user_id: str, monthly_quota: int) -> dict:
+    """This month's quota after a booking or a cancellation, as the account lookup reports it."""
+    used = _used_this_month(session, user_id)
+    return {"monthly_quota": monthly_quota, "used_this_month": used,
+            "remaining_this_month": max(monthly_quota - used, 0)}
 
 
 # ---------------------------------------------------------------------------
@@ -121,7 +129,11 @@ def search_experiences(query: str = "", location: str = "", only_available: bool
     with session_scope(cultpass_engine()) as session:
         q = session.query(cultpass.Experience).filter(cultpass.Experience.when >= datetime.now())
         if location:
-            q = q.filter(cultpass.Experience.location.ilike(f"%{location}%"))
+            # The model passes neighbourhoods and venues ("Lapa", "MASP") as the location too; those only appear
+            # in the title or description, and a location-only match found nothing ("no Samba Night at Lapa")
+            pattern = f"%{location}%"
+            q = q.filter(or_(cultpass.Experience.location.ilike(pattern), cultpass.Experience.title.ilike(pattern),
+                             cultpass.Experience.description.ilike(pattern)))
         if only_available:
             q = q.filter(cultpass.Experience.slots_available > 0)
         results = []
@@ -201,11 +213,14 @@ def reserve_experience(user_id: str, experience_id: str) -> dict:
         )
         exp.slots_available -= 1
         session.add(reservation)
+        session.flush()
         return {
             "success": True,
             "reservation_id": reservation.reservation_id,
             "experience": exp.title,
             "when": _fmt_dt(exp.when),
+            # The quota after this booking, so a reply that mentions it is backed by the tool result
+            **_quota_after(session, user_id, sub.monthly_quota),
         }
 
 
@@ -220,11 +235,14 @@ def cancel_reservation(user_id: str, reservation_id: str) -> dict:
         hours_left = (r.experience.when - datetime.now()).total_seconds() / 3600
         r.status = "cancelled"
         r.experience.slots_available += 1
+        session.flush()
+        sub = r.user.subscription
         return {
             "success": True,
             "reservation_id": reservation_id,
             "experience": r.experience.title,
             "credit_returned": hours_left >= 24,
+            **(_quota_after(session, user_id, sub.monthly_quota) if sub else {}),
         }
 
 

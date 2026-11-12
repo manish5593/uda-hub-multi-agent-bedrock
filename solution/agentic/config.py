@@ -37,6 +37,13 @@ LLM_PROVIDER = _env("UDAHUB_LLM_PROVIDER", "openai").lower()
 AWS_REGION = _env("AWS_REGION", _env("AWS_DEFAULT_REGION", "us-east-1"))
 # Attempts per Bedrock call when throttled, with adaptive back-off (agentic/llm.py)
 BEDROCK_MAX_ATTEMPTS = int(_env("UDAHUB_BEDROCK_MAX_ATTEMPTS", 10))
+# Bedrock chat calls allowed per minute, spaced out by a client-side rate limiter (agentic/llm.py). 0 = no limit.
+# A new account's Claude quota can be about 19 calls a minute, and AWS may decline an increase: without this, the
+# account agent's bursts of calls were throttled and every account request got the fallback reply.
+BEDROCK_REQUESTS_PER_MINUTE = float(_env("UDAHUB_BEDROCK_REQUESTS_PER_MINUTE", 0))
+# Longest reply a Bedrock chat call may write. Bedrock counts it against the tokens-per-minute quota before the
+# reply is written, so a generous value uses up a small quota: the agents' replies are well under 1024 tokens.
+BEDROCK_MAX_TOKENS = int(_env("UDAHUB_BEDROCK_MAX_TOKENS", 1024))
 
 # Embeddings follow the chat provider unless set separately. "sagemaker" uses a SageMaker endpoint
 # deployed with deploy/sagemaker_embeddings.py.
