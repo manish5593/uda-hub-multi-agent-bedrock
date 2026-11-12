@@ -35,6 +35,8 @@ GUEST_EXTERNAL_USER_ID = "guest"
 # Model provider: "openai" (OpenAI API) or "bedrock" (Amazon Bedrock, using the standard AWS credential chain)
 LLM_PROVIDER = _env("UDAHUB_LLM_PROVIDER", "openai").lower()
 AWS_REGION = _env("AWS_REGION", _env("AWS_DEFAULT_REGION", "us-east-1"))
+# Attempts per Bedrock call when throttled, with adaptive back-off (agentic/llm.py)
+BEDROCK_MAX_ATTEMPTS = int(_env("UDAHUB_BEDROCK_MAX_ATTEMPTS", 10))
 
 # Embeddings follow the chat provider unless set separately. "sagemaker" uses a SageMaker endpoint
 # deployed with deploy/sagemaker_embeddings.py.
