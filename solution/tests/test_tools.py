@@ -101,6 +101,14 @@ def test_routing_rules():
     for issue in ("reservation", "subscription", "billing_refund"):
         assert route_ticket({**GOOD, "issue_type": issue}, guest, "open") == (
             "knowledge_agent", f"{issue} question that needs no account data")
+    # ...and so does a guest whose request no account tool could act on, even marked as an account action
+    # (Claude marked "I forgot my password", "my QR code won't scan" and "delete my account" that way)
+    for issue in ("login_access", "technical", "account_privacy", "general_info"):
+        route, reason = route_ticket({**GOOD, "issue_type": issue, "requires_account_action": True}, guest, "open")
+        assert route == "knowledge_agent" and "no account tool" in reason
+    # An identified customer with the same request still goes to the account agent
+    assert route_ticket({**GOOD, "issue_type": "account_privacy", "requires_account_action": True},
+                        KNOWN, "open")[0] == "account_agent"
     assert route_ticket({**GOOD, "human_requested": True}, KNOWN, "open")[0] == "escalation_agent"
     assert route_ticket({**GOOD, "urgency": "critical"}, KNOWN, "open")[0] == "escalation_agent"
     assert route_ticket({**GOOD, "confidence": 0.2}, KNOWN, "open")[0] == "escalation_agent"

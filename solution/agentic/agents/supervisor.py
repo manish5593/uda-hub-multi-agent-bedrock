@@ -70,6 +70,12 @@ def route_ticket(classification: dict, customer: dict, ticket_status: str,
             # that without their account, so don't ask who they are first. If no article answers it, the
             # quality gate escalates as for any other knowledge question.
             return "knowledge_agent", f"{c.get('issue_type')} question that needs no account data"
+        if c.get("issue_type") not in ACCOUNT_ISSUES:
+            # Knowing who the guest is only helps if an account tool can act on the request, and the tools
+            # cover reservations, the subscription and billing. A forgotten password, a QR code that won't
+            # scan or deleting an account are answered from the knowledge base, even when the classifier
+            # marks them as account actions (Claude and Nova do; gpt-4o-mini doesn't).
+            return "knowledge_agent", f"{c.get('issue_type')}: no account tool acts on it, so the knowledge base answers"
         return "request_info", "account action needed but customer is not identified"
     if needs_account:
         return "account_agent", f"{c.get('issue_type')} needs account data/actions"

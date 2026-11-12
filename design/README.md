@@ -101,7 +101,9 @@ The rules are evaluated in order:
    → **escalation** (the documented fix didn't work). Reservations and subscription changes are routine and
    expected to repeat, so they're excluded.
 8. Account data or action needed, customer unknown → **request_info**. A guest's question about how reservations,
-   the subscription or billing work, with no account action needed, goes to **knowledge_agent** instead.
+   the subscription or billing work, with no account action needed, goes to **knowledge_agent** instead, and so
+   does a guest's request that no account tool could act on (a forgotten password, a QR code that won't scan,
+   deleting an account), even when the classifier marks it as an account action.
 9. Account data or action needed (`reservation`, `subscription`, `billing_refund`, or `requires_account_action`) → **account_agent**. This includes recommendations.
 10. Otherwise → **knowledge_agent**
 
