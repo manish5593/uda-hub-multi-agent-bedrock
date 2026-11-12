@@ -48,7 +48,7 @@ flowchart TD
 
     subgraph TOOLS ["<span style='color:rgb(26,32,44)'>Tools &amp; data (agentic/tools, data/)</span>"]
         direction TB
-        knowledge_tools("<span style='color:rgb(26,32,44)'>knowledge_tools<br/><small style='font-weight:normal;font-size:13px'>embeddings (OpenAI, Bedrock or SageMaker)<br/>keyword fallback · knowledge_agent</small></span>")
+        knowledge_tools("<span style='color:rgb(26,32,44)'>knowledge_tools<br/><small style='font-weight:normal;font-size:13px'>embeddings in memory · pgvector (service/)<br/>OpenAI, Bedrock, SageMaker · keywords</small></span>")
         cultpass_tools("<span style='color:rgb(26,32,44)'>cultpass_tools<br/><small style='font-weight:normal;font-size:13px'>bound to the ticket's customer<br/>book · cancel · subscription · refund</small></span>")
         ticket_tools("<span style='color:rgb(26,32,44)'>ticket_tools<br/><small style='font-weight:normal;font-size:13px'>tickets, messages, metadata<br/>customer_memory (long-term)</small></span>")
         checkpointer("<span style='color:rgb(26,32,44)'>Checkpointer<br/><small style='font-weight:normal;font-size:13px'>short-term memory per thread_id<br/>MemorySaver · PostgresSaver (service/)</small></span>")

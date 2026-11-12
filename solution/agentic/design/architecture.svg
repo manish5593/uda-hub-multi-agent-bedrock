@@ -89,8 +89,8 @@
 <text x="48" y="944" class="ph">Tools &amp; data (agentic/tools, data/)</text>
 <rect x="48" y="956" width="262" height="70" rx="10" fill="#fff6e0" stroke="#b7791f" stroke-width="1.6"/>
 <text x="179.0" y="980.0" class="t">knowledge_tools</text>
-<text x="179.0" y="998.0" class="s">embeddings (OpenAI, Bedrock or SageMaker)</text>
-<text x="179.0" y="1014.0" class="s">keyword fallback · knowledge_agent</text>
+<text x="179.0" y="998.0" class="s">embeddings in memory · pgvector (service/)</text>
+<text x="179.0" y="1014.0" class="s">OpenAI, Bedrock, SageMaker · keywords</text>
 <rect x="326" y="956" width="262" height="70" rx="10" fill="#fff6e0" stroke="#b7791f" stroke-width="1.6"/>
 <text x="457.0" y="980.0" class="t">cultpass_tools</text>
 <text x="457.0" y="998.0" class="s">bound to the ticket's customer</text>

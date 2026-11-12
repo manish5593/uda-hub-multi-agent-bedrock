@@ -24,7 +24,7 @@
 <rect x="1185" y="100" width="170" height="345" rx="12" fill="none" stroke="#2d3748" stroke-width="1.2" stroke-dasharray="4 4"/>
 <text x="1199" y="93" class="ph">Model providers</text>
 <rect x="310" y="475" width="853" height="100" rx="12" fill="none" stroke="#b7791f" stroke-width="1.2" stroke-dasharray="4 4"/>
-<text x="324" y="566" class="ph">Postgres 16 · one database and login role per service</text>
+<text x="324" y="566" class="ph">Postgres 16 + pgvector · one database and login role per service</text>
 <rect x="40" y="120" width="200" height="76" rx="10" fill="#e8f6ee" stroke="#2e8b57" stroke-width="1.6"/>
 <text x="140.0" y="147.0" class="t">Channels and customers</text>
 <text x="140.0" y="165.0" class="s">web chat, email bridge (API key)</text>
@@ -102,7 +102,7 @@
 <text x="735.5" y="411.0" class="s">business rules</text>
 <rect x="828" y="350" width="155" height="76" rx="10" fill="#fdeefd" stroke="#c026d3" stroke-width="1.6"/>
 <text x="905.5" y="377.0" class="t">knowledge service</text>
-<text x="905.5" y="395.0" class="s">articles, embedding</text>
+<text x="905.5" y="395.0" class="s">articles, pgvector</text>
 <text x="905.5" y="411.0" class="s">index, RAG search</text>
 <path d="M345 196 V346" fill="none" stroke="#4a5568" stroke-width="1.6" marker-end="url(#arrow)"/>
 <text x="353" y="250" class="l" text-anchor="start">sign-up, login</text>
@@ -126,7 +126,7 @@
 <text x="735.5" y="532.0" class="s">users, bookings</text>
 <rect x="828" y="488" width="155" height="58" rx="10" fill="#fff6e0" stroke="#b7791f" stroke-width="1.6"/>
 <text x="905.5" y="514.0" class="t">knowledge</text>
-<text x="905.5" y="532.0" class="s">accounts, articles</text>
+<text x="905.5" y="532.0" class="s">articles, embeddings</text>
 <rect x="998" y="488" width="155" height="58" rx="10" fill="#fff6e0" stroke="#b7791f" stroke-width="1.6"/>
 <text x="1075.5" y="514.0" class="t">agent_state</text>
 <text x="1075.5" y="532.0" class="s">PostgresSaver checkpoints</text>
@@ -191,5 +191,5 @@
 <rect x="1044" y="724" width="16" height="11" rx="3" fill="#fdecea" stroke="#c0392b"/>
 <text x="1066" y="734" class="sh" style="font-size:12px">escalation_agent</text>
 <text x="40" y="760" class="sh">Prometheus scrapes all six services (request counts and latency, plus the agent's outcomes, routes, escalations and tool calls). Every service has /health;</text>
-<text x="40" y="778" class="sh">the gateway's /ready checks the agent, tickets and auth services. GitHub Actions runs the offline tests, including the migrations on Postgres 16, on every pull request.</text>
+<text x="40" y="778" class="sh">the gateway's /ready checks the agent, tickets and auth services. GitHub Actions runs the offline tests, including the migrations and pgvector index on Postgres 16, on every pull request.</text>
 </svg>
