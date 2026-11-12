@@ -20,13 +20,13 @@ configured, but a full run waits on AWS approving the account for Anthropic mode
 
 ## Architecture
 
-![UDA-Hub deployment as microservices](../solution/agentic/design/deployment.svg)
+![UDA-Hub deployment as microservices](../design/deployment.svg)
 
 The gateway is the only public entry point. It accepts channel integrations with an API key and logged-in
 customers with a JWT access token, which the **auth service** issues after sign-up or login. The **agent service**
 runs the whole LangGraph workflow: its nodes are
 shown in the order they run, with the same names as in `solution/agentic/workflow.py` (the full workflow, with
-each node's role and routing conditions, is [`architecture.svg`](../solution/agentic/design/architecture.svg)).
+each node's role and routing conditions, is [`architecture.svg`](../design/architecture.svg)).
 The tickets, cultpass and knowledge services only hold data, each in its own Postgres database, and the auth
 service holds the customer logins in its own.
 

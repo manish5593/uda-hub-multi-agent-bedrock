@@ -26,7 +26,7 @@ it made inconsistently. Each was fixed by moving that decision into code, which 
 
 ## 2. Architecture
 
-![UDA-Hub architecture](solution/agentic/design/architecture.svg)
+![UDA-Hub architecture](design/architecture.svg)
 
 One graph run handles one customer message:
 
@@ -47,7 +47,7 @@ One graph run handles one customer message:
 blocked accounts always go to Trust & Safety. The supervisor's routing is plain code rather than an LLM, so
 every routing decision is predictable, testable and explained in the log. That's also why the project builds its own
 `StateGraph` rather than using `langgraph-supervisor`, whose supervisor is an LLM. The full design is in
-[`solution/agentic/design/README.md`](solution/agentic/design/README.md).
+[`design`](design/README.md).
 
 ## 3. Implementation
 
@@ -118,7 +118,7 @@ So the agents, prompts, tools and rules are unchanged, and each business rule is
 | Monitoring | Request metrics on every service, plus what the agent did with each message (outcome, route, escalation team and priority, tools). Prometheus collects them, and a provisioned Grafana dashboard shows support outcomes, traffic, errors and latency |
 | Tracing (optional) | Langfuse, self-hosted: every graph run, node, model call and tool call, grouped by ticket |
 
-![UDA-Hub deployment as microservices](solution/agentic/design/deployment.svg)
+![UDA-Hub deployment as microservices](design/deployment.svg)
 
 ### Customer authentication
 
@@ -383,6 +383,6 @@ Running the full stack and the evaluation with a real model for the first time, 
 | [`solution/evals/README.md`](solution/evals/README.md) | The evaluation suite: running it, what is checked, and the case format |
 | [`service/README.md`](service/README.md) | The microservices: architecture, running with Docker Compose, the demo web chat, customer logins (JWT), embeddings in Postgres (pgvector), monitoring, LLM tracing (Langfuse), schema migrations, the API |
 | [`.github/workflows/tests.yml`](.github/workflows/tests.yml) | CI: both test suites, with a Postgres service that has pgvector, on every pull request |
-| [`solution/agentic/design/README.md`](solution/agentic/design/README.md) | Architecture, routing rules, memory, logging, safeguards, inputs and outputs |
+| [`design`](design/README.md) | Architecture, routing rules, memory, logging, safeguards, inputs and outputs |
 | [`solution/03_agentic_app.ipynb`](solution/03_agentic_app.ipynb) | The executed demonstration |
 | [`README.md`](README.md) | Setup, tests and the full demo results |

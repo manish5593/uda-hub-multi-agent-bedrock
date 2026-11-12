@@ -6,7 +6,7 @@
                                                        └─> request_info ────────────────────────────────────────────┤
                                      END <- write_memory <- finalize <──────────────────────────────────────────────┘
 
-See agentic/design/README.md for the full architecture.
+See design/README.md (at the repository root) for the full architecture.
 """
 import logging
 import traceback

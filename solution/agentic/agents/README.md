@@ -2,8 +2,8 @@
 
 Each module provides one or more LangGraph nodes, which `agentic/workflow.py` wires into the graph. A node reads the
 shared `UdaHubState` and returns the fields it changes. Every node also adds a line to `state["trace"]`, so each
-decision can be audited. The full flow and routing rules are in [`../design/README.md`](../design/README.md), and its
-[Safeguards](../design/README.md#safeguards-the-llm-proposes-code-decides) section lists which decisions are enforced in code.
+decision can be audited. The full flow and routing rules are in [`../../../design`](../../../design/README.md), and its
+[Safeguards](../../../design/README.md#safeguards-the-llm-proposes-code-decides) section lists which decisions are enforced in code.
 
 | Module | Node(s) | Uses the LLM | What it does |
 |---|---|---|---|

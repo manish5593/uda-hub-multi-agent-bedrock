@@ -20,7 +20,7 @@ Files in this folder:
 | `architecture.svg` | The agent workflow above: every node by its name in the code, the decision paths, tools, data stores and memory |
 | `deployment.svg` | Where that workflow runs as microservices (see [Deployment](#deployment)): API gateway, services including auth, Postgres, migrations, Prometheus and Grafana, Langfuse, and the model providers |
 | `workflow_graph.mmd` | The same diagram as `architecture.svg` in Mermaid, so GitHub and IDEs can render it: the same layout, node descriptions, route labels, tools panel and colours, with a red `LLM` badge on the nodes that call the model; the text is black. In labels, write colours as `rgb(...)`: Mermaid reads `#xxxxxx;` as a character code and breaks the style. It is hand-written; when the graph changes, check its nodes and edges against `orchestrator.get_graph().draw_mermaid()`. |
-| `README.md` | This design document |
+| `../README.md` | This design document |
 
 ## Architecture pattern: Supervisor
 
@@ -126,7 +126,7 @@ Thresholds are set in `agentic/config.py` and can be overridden with env vars.
 | Kind | Where | What |
 |---|---|---|
 | **State** | `UdaHubState` (LangGraph) | Classification, route, retrieved articles, tool actions, assessment and trace for the current step of the execution. |
-| **Short-term** | Checkpointer keyed by `thread_id` = ticket id: `MemorySaver` (in memory) in the notebooks and tests, `PostgresSaver` in the agent service ([`service/`](../../../service/README.md)) | The session's conversation, customer and metadata, so follow-ups ("cancel *that one*") work within a session. With `PostgresSaver` the conversation also survives restarts, and any agent replica can continue any ticket. |
+| **Short-term** | Checkpointer keyed by `thread_id` = ticket id: `MemorySaver` (in memory) in the notebooks and tests, `PostgresSaver` in the agent service ([`../service`](../service/README.md)) | The session's conversation, customer and metadata, so follow-ups ("cancel *that one*") work within a session. With `PostgresSaver` the conversation also survives restarts, and any agent replica can continue any ticket. |
 | **Long-term** | `udahub.db`: `customer_memory` table, plus `tickets` and `ticket_messages` | Customer preferences, personal facts and reported issues, previous tickets (issue, status, last reply) and the full message log. These are recalled at the start of every new ticket for that customer. Only facts the customer stated are stored. State the system can look up live, such as reservations, is never stored, so it can't go stale. |
 | **Inspection by `thread_id`** | The checkpointer | `orchestrator.get_state(config)` returns a ticket's messages, tool usage (`actions_taken`) and decision `trace`; `get_state_history(config)` returns every checkpoint, which shows the order the nodes ran in. |
 | **Recovery after a restart** | `ticket_messages` in `udahub.db` | With `MemorySaver`, the checkpointer is lost on restart. When a new session starts on an existing ticket, `load_context` reloads the ticket's saved messages as `ticket_history`, so the conversation continues. |
@@ -145,7 +145,7 @@ Thresholds are set in `agentic/config.py` and can be overridden with env vars.
 - `ticket_tools.py`: ticket creation and linking, message log, metadata updates, prior tickets, and long-term memory,
   with a duplicate check that ignores case and punctuation.
 
-The tool tables are in [`../tools/README.md`](../tools/README.md).
+The tool tables are in [`../solution/agentic/tools/README.md`](../solution/agentic/tools/README.md).
 
 ## Safeguards: the LLM proposes, code decides
 
@@ -163,8 +163,8 @@ Each decision with real consequences is enforced in code rather than left to a p
 | Sending a wrong or unsupported answer | The draft is escalated when it isn't backed by the evidence, the evidence doesn't answer the question, no relevant article was found, or confidence is below 0.7 | `should_escalate`, `KnowledgeRetriever.search` |
 | Storing stale, invented or personal memories | The memory writer sees only the customer's messages. Filters drop reservation state, named experiences, one-off requests and contact details, and duplicates are skipped | `customer_messages_text`, `drop_reason`, `save_memory` |
 
-These rules are covered by the offline tests in `tests/`. The demo results in the [root README](../../../README.md#demo-results)
-show them working against the real model, and the [evaluation suite](../../evals/README.md) measures them over
+These rules are covered by the offline tests in `tests/`. The demo results in the [root README](../README.md#demo-results)
+show them working against the real model, and the [evaluation suite](../solution/evals/README.md) measures them over
 repeated runs: routing, outcomes, escalation teams, tool calls, and whether replies are supported by the evidence.
 
 ## Deployment
@@ -173,7 +173,7 @@ The same graph runs in two ways, with the same nodes, prompts, tools and rules:
 
 - **In process** (notebooks, tests, evaluation): the tools read and write the SQLite files in `data/`, and the
   checkpointer is `MemorySaver`.
-- **As microservices** ([`service/`](../../../service/README.md), diagram below): an API gateway, the agent service, and CultPass,
+- **As microservices** ([`../service`](../service/README.md), diagram below): an API gateway, the agent service, and CultPass,
   ticket, knowledge and auth services, each with its own Postgres database. Channels call the gateway with an
   API key; customers can sign up and log in, and their JWT access token, not the message metadata, says who
   they are. The agent's tools call the other services

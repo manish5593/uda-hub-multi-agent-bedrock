@@ -5,13 +5,13 @@ system that resolves customer support tickets for CultPass. It classifies each t
 agent, and then either resolves it (with RAG and account tools) or escalates it to a human. It uses short- and
 long-term memory throughout.
 
-The full architecture, routing rules and memory design are in [`agentic/design/README.md`](agentic/design/README.md).
-Its [Safeguards](agentic/design/README.md#safeguards-the-llm-proposes-code-decides) section lists every business rule
+The full architecture, routing rules and memory design are in [`../design`](../design/README.md).
+Its [Safeguards](../design/README.md#safeguards-the-llm-proposes-code-decides) section lists every business rule
 and policy that is enforced in code rather than left to the model.
 
 ## How a ticket flows
 
-![UDA-Hub agent workflow](agentic/design/architecture.svg)
+![UDA-Hub agent workflow](../design/architecture.svg)
 
 Each node is coloured by its agent type, the module in `agentic/agents` it comes from: gray `memory_agent`
 (`load_context`, `finalize`, `write_memory`), teal `classifier`, purple `supervisor` (`supervisor`,
@@ -19,7 +19,7 @@ Each node is coloured by its agent type, the module in `agentic/agents` it comes
 and red `escalation_agent`. A red **LLM** badge marks every node that calls the model; it is not a colour. Green is
 the customer, yellow is tools and data, and dashed arrows are conditional routes. The node names are the ones in
 `agentic/workflow.py`. When deployed as microservices, the same nodes run inside the agent service: see
-[`deployment.svg`](agentic/design/deployment.svg), which uses the same colours.
+[`deployment.svg`](../design/deployment.svg), which uses the same colours.
 
 | Node | What it does |
 |---|---|
@@ -152,7 +152,7 @@ failures on correct answers. The full results are in [`../report.md`](../report.
 | `agentic/workflow.py` | The LangGraph graph (`orchestrator`) and `process_ticket()` |
 | [`agentic/agents/`](agentic/agents/README.md) | `classifier`, `supervisor`, `knowledge_agent`, `account_agent`, `quality_gate`, `escalation_agent`, `write_memory`. The README covers the memory rules and how to add an agent. |
 | [`agentic/tools/`](agentic/tools/README.md) | CultPass account tools, RAG retriever, ticket and memory storage. The README covers the rules each tool enforces and how to add a tool. |
-| [`agentic/design/`](agentic/design/README.md) | Architecture diagram, Mermaid graph, and the design document: routing rules, resolve-or-escalate logic, memory, and safeguards |
+| [`../design`](../design/README.md) | Architecture diagram, Mermaid graph, and the design document: routing rules, resolve-or-escalate logic, memory, and safeguards |
 | `agentic/config.py` | Models, database paths and decision thresholds |
 | `agentic/llm.py` | Chat and embedding models for OpenAI, Amazon Bedrock or a SageMaker endpoint |
 | `agentic/remote/` | HTTP clients the tools use when running as microservices ([`service/`](../service/README.md)) |
@@ -182,8 +182,8 @@ The project overview for the whole repository is in the [root README](../README.
 | Memory: state, short-term and long-term | `agentic/state.py`, `agentic/agents/memory_agent.py`, `agentic/tools/ticket_tools.py`, `CustomerMemory` in `data/models/udahub.py`. Notebook 03's "Persistent memory" cells show a returning customer's stored history, a fresh session (empty checkpointer) picking up a ticket from `udahub.db`, inspecting a ticket by `thread_id` (messages, tool usage, trace, node order), and a preference learned in one session and used in another (scenarios 12 and 13). |
 | At least 14 knowledge articles | `data/external/cultpass_articles.jsonl` (18 articles) |
 | Configuration and thresholds | `agentic/config.py` (overridable with env vars) |
-| Structured, searchable logs | `agentic/event_log.py`, documented in the design README's [Logging](agentic/design/README.md#logging) section, and searched in notebook 03 |
+| Structured, searchable logs | `agentic/event_log.py`, documented in the design README's [Logging](../design/README.md#logging) section, and searched in notebook 03 |
 | Error handling and edge cases | `process_ticket()` in `agentic/workflow.py`, and notebook 03's "Edge cases" cell |
-| Safeguards enforced in code | [`agentic/design/README.md`](agentic/design/README.md#safeguards-the-llm-proposes-code-decides) |
+| Safeguards enforced in code | [`../design`](../design/README.md#safeguards-the-llm-proposes-code-decides) |
 | Demo run with outputs | `03_agentic_app.ipynb`, summarised under [Demo results](#demo-results-notebook-03) |
 | Measuring accuracy over repeated runs | [`evals/`](evals/README.md): 36 labelled tickets scored in code and by an LLM judge |

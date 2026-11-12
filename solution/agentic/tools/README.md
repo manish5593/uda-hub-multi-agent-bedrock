@@ -2,7 +2,7 @@
 
 Each module provides plain Python functions, which hold the business rules and are unit-tested without an LLM.
 The tools the agents call are thin LangChain wrappers around them. Because the rules live in the tools, they hold
-whatever the model decides. The [Safeguards](../design/README.md#safeguards-the-llm-proposes-code-decides) section
+whatever the model decides. The [Safeguards](../../../design/README.md#safeguards-the-llm-proposes-code-decides) section
 of the design README lists them.
 
 ## `cultpass_tools.py`: CultPass account tools

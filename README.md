@@ -30,7 +30,7 @@ the containers (gateway, services, monitoring) and dark slate for the external m
 
 ### 1. The agent workflow
 
-![UDA-Hub agent workflow](solution/agentic/design/architecture.svg)
+![UDA-Hub agent workflow](design/architecture.svg)
 
 A ticket in natural language, plus optional metadata (customer, channel, urgency), goes through these nodes. As
 microservices, a customer who logged in is identified by their access token instead of the metadata:
@@ -52,7 +52,7 @@ Short-term memory is the conversation per ticket (the LangGraph checkpointer). L
 preferences, reported issues and past tickets, in `udahub.db`.
 
 Business rules and policies are enforced in code, not left to prompts: the LLM proposes, and code decides. See
-[Safeguards](solution/agentic/design/README.md#safeguards-the-llm-proposes-code-decides).
+[Safeguards](design/README.md#safeguards-the-llm-proposes-code-decides).
 
 ### 2. The deployment
 
@@ -66,7 +66,7 @@ The same workflow, with the same nodes, prompts, tools and rules, runs in two wa
   their own tickets. Prometheus and Grafana show traffic and support outcomes, and Langfuse
   traces every model and tool call. A web chat at `/demo` is for trying it in a browser.
 
-![UDA-Hub deployment as microservices](solution/agentic/design/deployment.svg)
+![UDA-Hub deployment as microservices](design/deployment.svg)
 
 An evaluation suite ([`solution/evals/`](solution/evals/README.md)) runs 36 labelled tickets against the real model
 and reports routing, outcome, tool and answer accuracy: **95 of 108 runs pass every check (88%)**, and every
@@ -111,7 +111,7 @@ solution/
 | [`solution/README.md`](solution/README.md) | Project guide: ticket flow, demo results, and where each requirement is met |
 | [`service/README.md`](service/README.md) | Microservices: architecture, how the split works, running with Docker Compose, customer logins (JWT), monitoring with Grafana, LLM tracing with Langfuse, schema migrations, the public API, and limitations |
 | [`evals/`](solution/evals/README.md) | Evaluation suite: running it, what is checked, and the case format |
-| [`agentic/design/`](solution/agentic/design/README.md) | Architecture, routing rules, resolve-or-escalate logic, memory, and safeguards |
+| [`design/`](design/README.md) | Architecture, routing rules, resolve-or-escalate logic, memory, and safeguards |
 | [`agentic/agents/`](solution/agentic/agents/README.md) | Each agent node, the long-term memory rules, and how to add an agent |
 | [`agentic/tools/`](solution/agentic/tools/README.md) | Each tool and the rules it enforces, retrieval, and how to add a tool |
 | [`data/core/`](solution/data/core/README.md) | `udahub.db`: tables, committed contents, and how the agents write to it |
@@ -334,16 +334,16 @@ replies, the same suite scored 69%, mostly from faithfulness failures on correct
 | Deliverable | Where |
 |---|---|
 | Multi-agent architecture (supervisor, classifier, knowledge_agent, account_agent, escalation_agent) | [`solution/agentic/agents/`](solution/agentic/agents/), [`solution/agentic/workflow.py`](solution/agentic/workflow.py) |
-| Architecture design | [`solution/agentic/design/README.md`](solution/agentic/design/README.md) |
+| Architecture design | [`design`](design/README.md) |
 | Input handling (text + metadata) | `process_ticket()` in [`workflow.py`](solution/agentic/workflow.py), `load_context` in [`memory_agent.py`](solution/agentic/agents/memory_agent.py) |
 | Routing, RAG, resolve or escalate | [`supervisor.py`](solution/agentic/agents/supervisor.py), [`knowledge_agent.py`](solution/agentic/agents/knowledge_agent.py), [`quality_gate.py`](solution/agentic/agents/quality_gate.py). Notebook 03 also shows the routing rules on 10 sample tickets. |
 | Tools (incl. internal refund tool) | [`solution/agentic/tools/`](solution/agentic/tools/). Notebook 03 also calls each tool on sample operations, including its error cases. |
 | Memory (state, short-term, long-term) | [`memory_agent.py`](solution/agentic/agents/memory_agent.py), [`ticket_tools.py`](solution/agentic/tools/ticket_tools.py), `CustomerMemory` in [`udahub.py`](solution/data/models/udahub.py). Notebook 03 shows a returning customer's stored history, a fresh session picking up a ticket from the database, inspecting a ticket by `thread_id`, and a preference learned in one session and used in another (scenarios 12 and 13). |
 | Knowledge base (≥ 14 articles) | [`cultpass_articles.jsonl`](solution/data/external/cultpass_articles.jsonl) (18) |
 | Demo (committed with outputs) | [`03_agentic_app.ipynb`](solution/03_agentic_app.ipynb) |
-| Structured, searchable logs | [`event_log.py`](solution/agentic/event_log.py) writes every decision to `logs/events.jsonl`. Notebook 03 searches it, and the [Logging](solution/agentic/design/README.md#logging) section lists the fields. |
+| Structured, searchable logs | [`event_log.py`](solution/agentic/event_log.py) writes every decision to `logs/events.jsonl`. Notebook 03 searches it, and the [Logging](design/README.md#logging) section lists the fields. |
 | Error handling and edge cases | `process_ticket()` in [`workflow.py`](solution/agentic/workflow.py). Notebook 03's "Edge cases" cell covers an empty message, gibberish, an unknown customer, an unknown account and an LLM outage. |
-| Safeguards enforced in code | [Safeguards](solution/agentic/design/README.md#safeguards-the-llm-proposes-code-decides) |
+| Safeguards enforced in code | [Safeguards](design/README.md#safeguards-the-llm-proposes-code-decides) |
 | Evaluation over repeated runs | [`solution/evals/`](solution/evals/README.md): 36 labelled tickets, scored in code and by an LLM judge |
 | Deployment as microservices | [`service/`](service/README.md): an API gateway and five services (including customer sign-up and login with JWTs), Postgres, Alembic migrations, Docker Compose, Prometheus and Grafana |
 
