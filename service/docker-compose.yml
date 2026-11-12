@@ -26,8 +26,10 @@ x-common-env: &common-env
   LOG_LEVEL: ${LOG_LEVEL:-INFO}
 
 services:
+  # Postgres 16 with pgvector (postgres/Dockerfile): the knowledge service keeps its embeddings there
   db:
-    image: postgres:16-alpine
+    build: ./postgres
+    image: udahub-postgres:16-pgvector
     restart: unless-stopped
     environment:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in service/.env}
@@ -117,6 +119,8 @@ services:
     environment:
       <<: *common-env
       UDAHUB_DB_URL: postgresql+psycopg://knowledge_svc:${KNOWLEDGE_DB_PASSWORD}@db:5432/knowledge
+      # Article embeddings in Postgres (pgvector) instead of in memory; "memory" switches back
+      UDAHUB_VECTOR_STORE: ${UDAHUB_VECTOR_STORE:-pgvector}
     healthcheck: *healthcheck
     depends_on:
       seed: {condition: service_completed_successfully}

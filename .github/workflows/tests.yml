@@ -14,10 +14,10 @@ jobs:
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    # The migration tests also run against a real Postgres (same major version as docker-compose.yml)
+    # The migration and pgvector tests also run against a real Postgres with pgvector (same major version as docker-compose.yml)
     services:
       postgres:
-        image: postgres:16-alpine
+        image: pgvector/pgvector:pg16
         env:
           POSTGRES_PASSWORD: postgres
         ports: ["5432:5432"]

@@ -19,3 +19,14 @@ WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = :'db') \gexec
 REVOKE ALL ON DATABASE :"db" FROM PUBLIC;
 SQL
 done
+
+# pgvector for the knowledge service's embedding index. The extension isn't "trusted", so the service's own
+# role can't create it: the superuser does, here. Skipped (with a warning) on a server without pgvector,
+# where the knowledge service falls back to its in-memory index.
+if psql --username "$POSTGRES_USER" --dbname knowledge -Atc \
+        "SELECT 1 FROM pg_available_extensions WHERE name = 'vector'" | grep -q 1; then
+    psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname knowledge \
+         -c "CREATE EXTENSION IF NOT EXISTS vector"
+else
+    echo "WARNING: pgvector is not installed on this server; the knowledge service will keep its index in memory" >&2
+fi

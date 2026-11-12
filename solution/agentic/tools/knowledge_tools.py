@@ -44,8 +44,19 @@ def load_articles(account_id: str) -> list[dict]:
         ]
 
 
+def document_text(article: dict) -> str:
+    """The text that is embedded for an article."""
+    return f"{article['title']}\nTags: {article['tags']}\n{article['content']}"
+
+
 class KnowledgeRetriever:
-    """Semantic search with OpenAI embeddings; falls back to keyword scoring if embeddings fail."""
+    """Semantic search with embeddings, kept in memory; falls back to keyword scoring if embeddings fail.
+
+    Subclasses keep the embeddings elsewhere by overriding _build_index and _embedding_search (the
+    knowledge service keeps them in Postgres with pgvector: service/knowledge_service/pgvector_index.py)."""
+
+    # Where the embeddings live, for logs and the knowledge service's answers
+    store = "memory"
 
     def __init__(self, account_id: str):
         self.account_id = account_id
@@ -53,20 +64,28 @@ class KnowledgeRetriever:
         self.mode = "keyword"
         self._store = None
         try:
-            docs = [
-                Document(
-                    page_content=f"{a['title']}\nTags: {a['tags']}\n{a['content']}",
-                    metadata={k: a[k] for k in ("article_id", "title", "tags")},
-                )
-                for a in self.articles
-            ]
-            if docs:
-                self._store = InMemoryVectorStore(get_embeddings())
-                self._store.add_documents(docs)
+            if self.articles:
+                self._build_index()
                 self.mode = "embedding"
         except Exception as exc:  # e.g. no API access to the embedding model
             logger.warning("Embedding index unavailable (%s); using keyword retrieval.", exc)
         self._idf = self._build_idf()
+
+    def _build_index(self) -> None:
+        docs = [
+            Document(page_content=document_text(a), metadata={k: a[k] for k in ("article_id", "title", "tags")})
+            for a in self.articles
+        ]
+        self._store = InMemoryVectorStore(get_embeddings())
+        self._store.add_documents(docs)
+
+    def _embedding_search(self, query: str, k: int) -> list[tuple[dict, float]]:
+        """The k nearest articles with their cosine similarity, best first."""
+        by_id = {a["article_id"]: a for a in self.articles}
+        return [
+            (by_id[doc.metadata["article_id"]], score)
+            for doc, score in self._store.similarity_search_with_score(query, k=k)
+        ]
 
     def _build_idf(self) -> dict:
         df = Counter()
@@ -97,11 +116,7 @@ class KnowledgeRetriever:
         """Return the top-k relevant articles (score >= threshold), best first."""
         if self.mode == "embedding":
             try:
-                by_id = {a["article_id"]: a for a in self.articles}
-                hits = [
-                    (by_id[doc.metadata["article_id"]], score)
-                    for doc, score in self._store.similarity_search_with_score(query, k=k)
-                ]
+                hits = self._embedding_search(query, k)
             except Exception as exc:
                 logger.warning("Embedding search failed (%s); using keyword retrieval.", exc)
                 hits = self._keyword_search(query, k)
@@ -115,6 +130,8 @@ class KnowledgeRetriever:
 
 
 _retrievers: dict[str, KnowledgeRetriever] = {}
+# The class get_retriever builds; the knowledge service swaps in its pgvector retriever
+retriever_class: type[KnowledgeRetriever] = KnowledgeRetriever
 
 
 def get_retriever(account_id: str) -> KnowledgeRetriever:
@@ -123,7 +140,7 @@ def get_retriever(account_id: str) -> KnowledgeRetriever:
         from agentic.remote.knowledge import RemoteRetriever
         return RemoteRetriever(account_id)
     if account_id not in _retrievers:
-        _retrievers[account_id] = KnowledgeRetriever(account_id)
+        _retrievers[account_id] = retriever_class(account_id)
     return _retrievers[account_id]
 
 

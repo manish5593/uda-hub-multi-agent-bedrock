@@ -140,7 +140,8 @@ Thresholds are set in `agentic/config.py` and can be overridden with env vars.
 - `knowledge_tools.py`: `KnowledgeRetriever` builds an `InMemoryVectorStore` over the account's `knowledge`
   table with the configured embedding model (OpenAI `text-embedding-3-small` by default, Amazon Bedrock Titan, or
   a SageMaker endpoint), and keeps articles scoring at least 0.30. If embeddings are unavailable, it falls back
-  to IDF keyword scoring.
+  to IDF keyword scoring. As microservices, the knowledge service keeps the embeddings in Postgres with pgvector
+  instead, so only new or changed articles are embedded and every replica shares one index.
 - `ticket_tools.py`: ticket creation and linking, message log, metadata updates, prior tickets, and long-term memory,
   with a duplicate check that ignores case and punctuation.
 

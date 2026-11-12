@@ -67,7 +67,8 @@ to the knowledge agent.
 
 ### Knowledge retrieval
 
-Articles are embedded into an in-memory vector store, and retrieval keeps the top 3 with a cosine similarity of
+Articles are embedded into a vector store (in memory in the notebooks; in Postgres with pgvector in the
+microservices, so only new or changed articles are embedded), and retrieval keeps the top 3 with a cosine similarity of
 at least 0.30. If none qualifies, no answer is drafted and the ticket escalates. If articles are found, the quality gate
 checks both that the answer is **grounded** in them and that they **actually answer the question**. That catches
 weakly related articles (section 6). If embeddings are unavailable, retrieval falls back to keyword scoring.

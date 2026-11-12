@@ -41,7 +41,7 @@ containers (gateway, services, monitoring) and dark slate for the external model
 | `agent` | `agent_state` DB (LangGraph checkpoints) | Runs the LangGraph workflow for one customer message, with the agents from `solution/agentic/agents` (see [The agents in the agent service](#the-agents-in-the-agent-service)) | cultpass, tickets, knowledge, the chat model |
 | `cultpass` | `cultpass` DB | The CultPass system of record: customers, subscriptions, experiences, reservations, and their rules (quota, premium tier, blocked accounts, free slots) | nothing |
 | `tickets` | `tickets` DB | Tickets, messages, UDA-Hub users and long-term customer memory | nothing |
-| `knowledge` | `knowledge` DB | Knowledge-base articles and their embedding index; RAG search with the keyword fallback | the embedding model |
+| `knowledge` | `knowledge` DB | Knowledge-base articles and their embedding index, stored with pgvector; RAG search with the keyword fallback (see [Embeddings in Postgres](#embeddings-in-postgres-pgvector)) | the embedding model |
 | `auth` | `auth` DB | Customer sign-up (verified by a code sent to their CultPass email) and login; stores bcrypt password hashes and issues the access tokens the gateway checks (see [Customer logins](#customer-logins-jwt)) | cultpass |
 
 Supporting containers:
@@ -203,6 +203,31 @@ How it works:
 - **Rate limits:** sign-up and login are limited per client IP (10 a minute), and each logged-in customer
   has their own budget, like each API key.
 
+### Embeddings in Postgres (pgvector)
+
+The database image (`postgres/Dockerfile`) is `postgres:16-alpine` with the
+[pgvector](https://github.com/pgvector/pgvector) extension, which `db-setup` enables in the `knowledge` database.
+The knowledge service keeps each article's embedding in the table `knowledge_embeddings`
+(`knowledge_service/pgvector_index.py`) and searches it with cosine distance (`<=>`):
+
+- **Only new or changed articles are embedded**, at startup or on `POST /accounts/{id}/reindex`. A restart
+  embeds nothing; editing an article embeds that one again. Rows of deleted articles go with them, and when
+  `seed --reset` reloads every article, the first search finds the index empty and embeds them again.
+- **One index for every replica** of the knowledge service, instead of one in-memory copy each.
+- **Each embedding model has its own vectors.** Rows record the model, so switching `UDAHUB_EMBEDDING_MODEL`
+  (e.g. OpenAI to Titan) embeds everything once and never compares vectors of different models.
+- **Scores are unchanged:** cosine similarity, so `UDAHUB_RAG_MIN_SCORE` means the same as in memory.
+
+The table is a derived index, rebuilt from the articles at any time, so the service creates it itself and it
+is outside the Alembic migrations (like the agent's checkpoint tables). Search is an exact scan, which suits a
+knowledge base this size; an HNSW index would be the next step for many thousands of articles. If pgvector is
+missing, the service logs a warning and keeps the index in memory. To look at it:
+
+```bash
+docker compose exec db psql -U postgres -d knowledge \
+  -c "SELECT model, count(*), vector_dims(embedding) FROM knowledge_embeddings GROUP BY 1, 3"
+```
+
 ### Monitoring
 
 ```bash
@@ -337,6 +362,7 @@ UDAHUB_TEST_POSTGRES_URL=postgresql+psycopg://postgres:<password>@localhost:5432
 | `CULTPASS_DB_URL`, `TICKETS_DB_URL`, `KNOWLEDGE_DB_URL` | migrate and seed jobs | The three service databases |
 | `CULTPASS_SERVICE_URL`, `TICKET_SERVICE_URL`, `KNOWLEDGE_SERVICE_URL` | agent | Where the other services are; the agent refuses to start without all three |
 | `AGENT_STATE_DB_URL` | agent | Postgres URL of the checkpointer; without it, conversations live in memory |
+| `UDAHUB_VECTOR_STORE` | knowledge | `pgvector` (the default in docker-compose): article embeddings in the knowledge database. `memory`: rebuilt in memory on every start, as in the notebooks |
 | `UDAHUB_SERVICE_TIMEOUT` | agent | Seconds per internal call (default 15) |
 | Model settings (`llm.env`) | agent, knowledge | As in `solution/.env.example` |
 | `GRAFANA_ADMIN_PASSWORD` | grafana | Password of Grafana's `admin` user (default `admin`) |
