@@ -12,12 +12,12 @@ sessions.
 | | |
 |---|---|
 | **Architecture** | Supervisor pattern in LangGraph: 7 agents in one `StateGraph` (11 nodes, 16 edges) |
-| **Models** | `gpt-4o-mini` for every agent and `text-embedding-3-small` for retrieval (the demo run, the full stack and the evaluation), with `gpt-4o` as the evaluation's judge. Claude on Amazon Bedrock (Claude Haiku 4.5 by default), Titan embeddings and a SageMaker embedding endpoint are implemented as alternatives; Bedrock answered test calls, but a full run waits on AWS account approval (section 4) |
+| **Models** | `gpt-4o-mini` for every agent and `text-embedding-3-small` for retrieval (the demo run, the full stack and the evaluation), with `gpt-4o` as the evaluation's judge. Claude on Amazon Bedrock (Claude Haiku 4.5 by default) with Titan embeddings passed the full evaluation as well; a SageMaker embedding endpoint is implemented but hasn't been run (sections 4 and 5) |
 | **Data** | Two SQLite databases: `cultpass.db` (customers, subscriptions, experiences, reservations) and `udahub.db` (tickets, messages, 18 knowledge articles, long-term memory). As microservices, the same tables in Postgres, one database per service, with the knowledge embeddings stored in pgvector |
 | **Deployment** | `service/`: an API gateway and five services (agent, CultPass, tickets, knowledge, auth) with Postgres and pgvector, Alembic migrations, Docker Compose, customer sign-up and login with JWTs, Prometheus with a Grafana dashboard, optional Langfuse tracing, and a web chat for demos (section 4). Run end to end with the real model |
 | **Demonstration** | `solution/03_agentic_app.ipynb`, committed with the outputs of a real-model run: 13 scenarios, 5 edge cases, and demos of routing, retrieval, tools, memory and logs |
-| **Tests** | 86 offline tests in `solution/tests` (36 unit, 20 end-to-end through the graph with a scripted model, 26 for the evaluation suite, 4 for tracing) and 116 in `service/tests` (services, customer logins with emailed login codes, tokens, the full HTTP flow, migrations on SQLite and Postgres, and the pgvector index on Postgres). No API key needed; GitHub Actions runs them on every pull request |
-| **Evaluation** | `solution/evals`: 36 labelled tickets, 3 runs each, against the real model, scored in code and by an LLM judge. **108 of 108 runs (100%) passed every check** in each of the last two evaluations, up from 95 (88%) at the first; the runs in between scored 94–99%, so expect an occasional miss (section 5) |
+| **Tests** | 98 offline tests in `solution/tests` (43 unit, 25 end-to-end through the graph with a scripted model, 26 for the evaluation suite, 4 for tracing) and 119 in `service/tests` (services, customer logins with emailed login codes, tokens, the full HTTP flow, migrations on SQLite and Postgres, and the pgvector index on Postgres). No API key needed; GitHub Actions runs them on every pull request |
+| **Evaluation** | `solution/evals`: 36 labelled tickets, 3 runs each, against the real model, scored in code and by an LLM judge. **108 of 108 runs (100%) passed every check** with `gpt-4o-mini` in each of the last three evaluations, up from 95 (88%) at the first, and 108 of 108 with Claude Haiku 4.5 on Bedrock; the runs in between scored 94–99%, so expect an occasional miss (section 5) |
 | **Environment** | Python 3.11, LangGraph 1.2.20, LangChain 1.4.9, langchain-openai 1.7.4, langchain-aws 1.9.2, SQLAlchemy 2.1, FastAPI 0.162, Postgres 16 with pgvector 0.8.7, PyJWT 2.15, bcrypt 5.0, Langfuse 4.78 (SDK 5.2) |
 
 The main lesson matched what I'd learned building earlier agent systems: **the LLM proposes, code decides.**
@@ -198,9 +198,8 @@ then the 13 notebook scenarios (16 turns) sent through the gateway:
   recorded a trace per message.
 - **Replies took 1.2 to 13 seconds**, with a median of about 5.
 
-Amazon Bedrock is configured and its credentials work: Titan embeddings and Claude Haiku 4.5 both answered test
-calls. A full run is blocked by AWS, not the code: a new account needs the Anthropic use-case form and account
-verification before Claude can be used.
+The stack ran on OpenAI. Amazon Bedrock was evaluated separately (section 5): Claude Haiku 4.5 with Titan
+embeddings passed every case, within an account quota of about 19 Claude calls a minute.
 
 ### Evaluation suite
 
@@ -251,8 +250,9 @@ made the cancellation check and Frank's first recommendation consistent as well.
 ### Evaluation
 
 The evaluation suite runs 36 labelled tickets, 3 times each (108 runs), with `gpt-4o-mini` running the agents
-and `gpt-4o` as the judge. The last two evaluations each passed **108 of 108 runs (100%)**, with a median of 4.7 to 4.9 seconds per
-message. The second ran after the two fixes found by re-running notebook 03 (section 6).
+and `gpt-4o` as the judge. The last three evaluations each passed **108 of 108 runs (100%)**, with a median of 4.7 to 5.9
+seconds per message. The second ran after the two fixes found by re-running notebook 03 (section 6), the third after
+every change since: the code step for typed emails, and the fixes found on Bedrock.
 
 | Check | First evaluation | Latest |
 |---|---|---|
@@ -295,10 +295,11 @@ couldn't find. Each evaluation in between pointed to the next problem, and secti
 | 6 | 107 / 108 (99%) | `recommend_experiences`; ids in the draft are checked |
 | 7 | 108 / 108 (100%) | The judge counts an article's suggested phrasing as evidence |
 | 8 | 108 / 108 (100%) | Stated interests go to `recommend_experiences`; the agent checks account state before confirming it |
+| 9 | 108 / 108 (100%) | Typed emails need a code; guests' requests no tool acts on are answered; bookings and cancellations return the quota left; locations match titles |
 
 Three caveats about the 100%:
 
-- **It is two evaluations.** The model's answers vary, and the runs before them each missed one or two in
+- **It is three evaluations.** The model's answers vary, and the runs before them each missed one or two in
   different cases. Expect 98–100% when it is repeated.
 - **Four of the changes were to the evaluation, not the agents.** Two loosened it: the judge doesn't count
   hedged suggestions ("you might enjoy") or an article's own suggested phrasing as unsupported claims. One
@@ -309,6 +310,29 @@ Three caveats about the 100%:
   106 of 108 (97% and 98%).
 - **A perfect run can't show that the judge would still catch a real error.** The earlier runs, with the same
   judge, did catch real ones: padded recommendations, and a reservation described as someone else's.
+
+#### On Amazon Bedrock
+
+The same 36 cases ran with Claude Haiku 4.5 on Bedrock and Titan embeddings, judged by `gpt-4o` on OpenAI
+(`UDAHUB_EVAL_JUDGE_PROVIDER=openai`), so the scores compare directly with the OpenAI runs:
+
+| Model | Runs passed | Median per message | |
+|---|---|---|---|
+| `gpt-4o-mini` (OpenAI) | 108 / 108 | 5.9 s | The same code, the same day |
+| Claude Haiku 4.5 (Bedrock) | **108 / 108** | 16.7 s | One uninterrupted run, rate-limited to 10 calls a minute |
+| Amazon Nova Pro (Bedrock) | 84 / 101 (83%) | 4.5 s | Earlier code: 7 runs crashed on a bug since fixed, and it wasn't re-run |
+
+Getting there took three kinds of change, all model-neutral, and `gpt-4o-mini` passed every case after each:
+
+- **Claude's judgments:** it marked three guest how-to questions as account actions and failed four account
+  cases (section 6). After the fixes, those cases passed 12 of 12 targeted runs and then every run of the full
+  evaluation.
+- **Titan's scores:** its relevance scores run lower than OpenAI's, so the knowledge base threshold is now per
+  embedding provider (0.24 for Titan, 0.30 for OpenAI).
+- **The account's quota:** about 19 Claude calls a minute, and AWS declined an increase. Unlimited, the account
+  agent's bursts were throttled and every account request got the fallback reply. A client-side rate limiter
+  shared by all agents, a smaller reply reservation (1,024 tokens) and adaptive retries made every run finish.
+  The cost is time: Claude's 16.7 s median is mostly waiting for the limiter, and a busy channel would wait too.
 
 The first run used `gpt-4o-mini` as its own judge and scored 69%. Its faithfulness check failed 24 of 55 replies,
 many of them correct: it flagged "your subscription has been paused" right after `change_subscription` had
@@ -377,6 +401,19 @@ cases, then the full evaluation:
 | **"Did my cancellation go through?" was answered from the conversation.** The agent repeated what it said earlier without checking, the gate saw no evidence for it, and the ticket was escalated. Found by re-running notebook 03. | The agent checks the account's current state with a tool before confirming it: earlier messages say what was done then, not what is true now. 5 of 5 targeted runs then checked and resolved it. |
 | **The judge flagged correct replies.** It counted "you might enjoy" as a claim, didn't know what `already_booked` meant, and flagged sentences an article gives as its suggested phrasing. | The judge's prompt covers each, and it sees the customer's stored preferences. Each flag was checked against the evidence first: every one was a correct reply. |
 
+Running the full evaluation on Amazon Bedrock (Claude Haiku 4.5, Nova Pro, Titan embeddings) found these:
+
+| Problem found | Fix |
+|---|---|
+| **The agents crashed on Bedrock's replies.** The Converse API can return a reply as a list of content blocks, and every place that treated it as text raised a TypeError (7 crashed runs on Nova Pro). | `text_of()` reads both forms; every agent uses it. |
+| **Titan dropped real answers.** Its scores run lower than OpenAI's: "my card was charged twice" scored 0.26 against the right article, under the 0.30 threshold. | A relevance threshold per embedding provider: 0.24 for Titan, 0.30 for OpenAI, measured against the questions no article covers (Titan's highest: 0.20). |
+| **Claude asked guests for their email instead of answering.** It marked "I forgot my password", "my QR code won't scan" and "delete my account" as account actions (0 of 3 runs each), and routing asks an unknown customer who they are. | Asking who a guest is only helps if an account tool can act on the request (reservations, the subscription, billing); anything else goes to the knowledge agent. |
+| **Correct quota counts failed as unsupported.** After a booking or cancellation, Claude said "you have 2 left", which was right, but no tool result had the number: the judge failed it and the gate escalated cancellations. | Booking and cancelling return the quota left. |
+| **"Samba Night at Lapa" wasn't found.** Claude searched with location "Lapa", which is in the title, not the location, and told Bob it didn't exist instead of that he had booked it. | A location also matches titles and descriptions. |
+| **Alternatives gained invented reasons.** "You're in Rio, so this could be a great addition to your trip!" | Alternatives are described by their facts only. |
+| **Throttling turned into fallback replies.** The account allows about 19 Claude calls a minute and AWS declined an increase. Retries alone ran out of their budget, and the reply limit (2,048 tokens) counted against the tokens-per-minute quota. | A rate limiter shared by all agents, a 1,024-token reply limit, and adaptive retries. The evaluation now saves each run as it finishes and records the gate's reasoning. |
+| **The judge couldn't stay the same.** On Bedrock it would have been Claude or Nova grading itself. | `UDAHUB_EVAL_JUDGE_PROVIDER` keeps `gpt-4o` judging every model. |
+
 Trying the demo page as a customer found this:
 
 | Problem found | Fix |
@@ -411,6 +448,11 @@ Trying the demo page as a customer found this:
 - **Use the product as a customer would.** Login and MFA were tested endpoint by endpoint, but trying the demo page
   as a customer showed that a typed email still bypassed them. Every way in has to prove identity, not just the
   newest one.
+- **A second model is a second test of the code.** Claude's failures were mostly the system's: tool results
+  that left a correct number unsupported, a search that only matched one field, a routing rule that trusted the
+  classifier. Fixing them in code helped both models.
+- **Measure a quota before working around it.** Calls per minute and tokens per minute both apply, and the reply
+  limit counts before anything is written.
 - **Optional features must be off without configuration.** Tracing and the extra Compose profiles change nothing
   unless they are configured, so the notebooks, the tests and the default stack keep working.
 
@@ -430,9 +472,10 @@ Trying the demo page as a customer found this:
   marks, and a wrong id is corrected only when the turn made exactly one booking; otherwise it is left for the
   gate. Both cover every case seen so far.
 - **The evaluation doesn't check long-term memory** yet: what gets written to `customer_memory`.
-- **Bedrock and SageMaker haven't completed a full run.** Bedrock credentials and model ids are verified (Titan
-  embeddings and Claude Haiku 4.5 answered test calls), but a new AWS account must be verified and approved for
-  Anthropic models first. SageMaker is covered by the offline tests only.
+- **The Bedrock account's quota limits Claude's throughput.** About 19 calls a minute (AWS declined an
+  increase): the rate limiter keeps every request working, but each message waits, about 17 seconds at the median
+  in the evaluation. Production use needs a higher quota or provisioned throughput. SageMaker embeddings are
+  covered by the offline tests only.
 - **The pgvector search is an exact scan.** That suits 18 articles; thousands would need an HNSW index, created
   per embedding model because it needs a fixed vector dimension.
 - **The gateway's rate limits are per replica.** They are kept in memory; with several gateway replicas they

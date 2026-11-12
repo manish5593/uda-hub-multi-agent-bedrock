@@ -65,8 +65,18 @@ Failures of the evaluation's own infrastructure aren't counted against the syste
 ### The judge
 
 The judge is the configured chat model unless `UDAHUB_EVAL_JUDGE_MODEL` names another model from the same
-provider (for example `UDAHUB_EVAL_JUDGE_MODEL=gpt-4o`). A stronger judge is more reliable, and it avoids a
-model grading its own replies. The judge sees the customer's messages, the reply, and the evidence the agents
+provider (for example `UDAHUB_EVAL_JUDGE_MODEL=gpt-4o`), or from `UDAHUB_EVAL_JUDGE_PROVIDER` (`openai` or
+`bedrock`). A stronger judge is more reliable, and it avoids a model grading its own replies. To compare models,
+keep the same judge: the Bedrock runs used
+
+```bash
+UDAHUB_LLM_PROVIDER=bedrock UDAHUB_CHAT_MODEL=us.anthropic.claude-haiku-4-5-20251001-v1:0 \
+UDAHUB_BEDROCK_REQUESTS_PER_MINUTE=10 UDAHUB_EVAL_JUDGE_PROVIDER=openai UDAHUB_EVAL_JUDGE_MODEL=gpt-4o \
+python -m evals.run
+```
+
+with the AWS credentials in the environment. The rate limit keeps a small Bedrock quota from throttling the run;
+each finished run is saved to `results.partial.json` as it goes, so a stopped evaluation keeps its results. The judge sees the customer's messages, the reply, and the evidence the agents
 had: the knowledge base articles they retrieved, the tool calls and their results, and the customer's
 profile and stored preferences. It doesn't see the case's description or the other expectations.
 

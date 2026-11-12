@@ -140,7 +140,8 @@ python -m evals.run            # needs the model settings in .env; 3 runs per ca
 See [`evals/README.md`](evals/README.md) for the checks, the case format, and the options.
 
 **Results:** with `gpt-4o-mini` running the agents and `gpt-4o` judging (`UDAHUB_EVAL_JUDGE_MODEL=gpt-4o`),
-**108 of 108 runs passed every check (100%)** in each of the last two evaluations, up from 95 (88%) at the first. The runs
+**108 of 108 runs passed every check (100%)** in each of the last three evaluations, up from 95 (88%) at the first.
+On Amazon Bedrock, Claude Haiku 4.5 also passed 108 of 108. The runs
 in between scored 94–99%, each missing one or two in different cases, so expect an occasional miss. The fixes
 in between: guests' how-to questions are answered from the knowledge base, the quality gate sees the account
 details the agent was given, code decides whether a reply waits for the customer and whether a human is needed,

@@ -15,8 +15,8 @@ monitoring and Langfuse included, has been run end to end with `docker compose` 
 (`gpt-4o-mini`): the 13 notebook scenarios sent through the gateway behaved as in the notebook, with real
 cancellations and refund requests, escalations to the right teams, no errors, and replies in 1 to 13 seconds.
 Customer sign-up and login worked, with the token deciding who the customer is. Prometheus counted every turn,
-Langfuse traced every message, and the knowledge service searched its pgvector index. Amazon Bedrock is
-configured, but a full run waits on AWS approving the account for Anthropic models.
+Langfuse traced every message, and the knowledge service searched its pgvector index. On Amazon Bedrock,
+Claude Haiku 4.5 passed the full evaluation (108 of 108); the stack itself ran on OpenAI.
 
 ## Architecture
 
@@ -401,6 +401,8 @@ UDAHUB_TEST_POSTGRES_URL=postgresql+psycopg://postgres:<password>@localhost:5432
 | Model settings: `UDAHUB_LLM_PROVIDER`, `OPENAI_API_KEY`, `UDAHUB_CHAT_MODEL`, `UDAHUB_EMBEDDING_*`, `UDAHUB_RAG_MIN_SCORE` | agent, knowledge | As in `solution/.env.example`; blank ones use the defaults in `agentic/config.py` |
 | `UDAHUB_EMAIL_PROVIDER`, `UDAHUB_EMAIL_FROM`, `UDAHUB_EMAIL_LOG_FALLBACK` | auth, agent | How one-time codes are delivered: `log` (default) writes them to the service log; `ses` emails them with Amazon SES from the verified sender, and never logs them. With the fallback on, a failed email is logged so a demo can go on |
 | `AWS_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | agent, knowledge, auth | For Bedrock (agent, knowledge) and SES (auth, agent) |
+| `UDAHUB_BEDROCK_REQUESTS_PER_MINUTE` | agent, knowledge | Bedrock chat calls a minute, spaced out by a client-side rate limiter shared by every agent (blank: no limit). Set it below the account's quota: a new account may allow only about 19 Claude calls a minute |
+| `UDAHUB_BEDROCK_MAX_TOKENS` | agent, knowledge | Longest reply a Bedrock call may write (default 1024). Bedrock counts it against the tokens-per-minute quota before answering |
 | `GRAFANA_ADMIN_PASSWORD` | grafana | Password of Grafana's `admin` user (default `admin`) |
 | `JWT_SECRET_KEY` | auth, gateway | Signs (auth) and verifies (gateway) customer access tokens; at least 32 characters. Without it the gateway accepts API keys only |
 | `JWT_TTL_MINUTES` | auth | How long an access token is valid (default 60) |
