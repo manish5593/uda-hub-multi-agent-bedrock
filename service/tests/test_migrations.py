@@ -4,6 +4,7 @@ Every test runs on a fresh SQLite file. If UDAHUB_TEST_POSTGRES_URL is set (a ro
 databases, e.g. postgresql+psycopg://postgres:pw@localhost:5432/postgres), they also run on a fresh
 Postgres database each, which is what CI does.
 """
+import json
 import os
 import uuid
 
@@ -153,3 +154,57 @@ def test_seed_loads_the_demo_data_once(new_db, name):
     with engine.connect() as conn:
         assert conn.execute(select(func.count()).select_from(table)).scalar() == first[table.name]
     engine.dispose()
+
+
+def test_local_customers_survive_a_reset_with_their_login(new_db, tmp_path):
+    """service/local/customers.json: your own demo customer is added after the demo data, again after
+    --reset, never twice, and with a password hash their login comes back in a new auth database."""
+    import bcrypt
+    cultpass_url, auth_url = new_db(), new_db()
+    upgrade("cultpass", cultpass_url)
+    upgrade("auth", auth_url)
+    me = {"user_id": "9f8e7d", "full_name": "Demo Presenter", "email": "Presenter@Example.com",
+          "subscription": {"subscription_id": "6c5b4a", "tier": "premium", "monthly_quota": 4},
+          "reservations": [{"reservation_id": "3e2d1c", "experience_id": "8aaed6"}],
+          "password_hash": bcrypt.hashpw(b"a-good-password-1", bcrypt.gensalt(4)).decode()}
+    path = tmp_path / "customers.json"
+    path.write_text(json.dumps([me]))
+    customers = seed.load_local_customers(path)
+
+    engine = create_engine(cultpass_url)
+    meta = DATABASES["cultpass"].metadata.tables
+
+    def state():
+        with engine.connect() as conn:
+            users = conn.execute(select(func.count()).select_from(meta["users"])
+                                 .where(meta["users"].c.email == "presenter@example.com")).scalar()
+            slots = conn.execute(select(meta["experiences"].c.slots_available)
+                                 .where(meta["experiences"].c.experience_id == "8aaed6")).scalar()
+            booked = conn.execute(select(meta["reservations"].c.status)
+                                  .where(meta["reservations"].c.reservation_id == "3e2d1c")).scalar()
+        return users, slots, booked
+
+    seed.seed("cultpass", cultpass_url)
+    with engine.connect() as conn:
+        demo_slots = conn.execute(select(meta["experiences"].c.slots_available)
+                                  .where(meta["experiences"].c.experience_id == "8aaed6")).scalar()
+    assert seed.add_local_customers(cultpass_url, auth_url, customers) == ["presenter@example.com"]
+    assert state() == (1, demo_slots - 1, "reserved")
+    assert seed.add_local_customers(cultpass_url, auth_url, customers) == []   # never twice
+    assert state() == (1, demo_slots - 1, "reserved")
+
+    seed.seed("cultpass", cultpass_url, reset=True)                           # the reset drops them...
+    assert state()[0] == 0
+    seed.add_local_customers(cultpass_url, auth_url, customers)               # ...and they come back
+    assert state() == (1, demo_slots - 1, "reserved")
+    engine.dispose()
+
+    auth = create_engine(auth_url)
+    with auth.connect() as conn:
+        rows = conn.execute(text("select email, external_user_id from credentials")).all()
+    auth.dispose()
+    assert rows == [("presenter@example.com", "9f8e7d")]
+
+
+def test_no_local_customers_file_adds_nothing(tmp_path):
+    assert seed.load_local_customers(tmp_path / "missing.json") == []

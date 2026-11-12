@@ -88,6 +88,9 @@ services:
     restart: "no"
     command: ["python", "-m", "service.scripts.seed"]
     environment: *service-db-urls
+    # Your own demo customers (git-ignored, see local/README.md); only the seed job sees them
+    volumes:
+      - ./local:/app/service/local:ro
     depends_on:
       migrate: {condition: service_completed_successfully}
 

@@ -128,7 +128,9 @@ Three one-shot jobs run on every `up`:
 2. `migrate` brings the cultpass, tickets, knowledge and auth databases to the latest schema
    (`scripts/migrate.py`, see [Schema migrations](#schema-migrations)).
 3. `seed` copies the committed demo data from the SQLite files into them (`scripts/seed.py`). It skips any
-   table that already has rows, so restarts never overwrite data.
+   table that already has rows, so restarts never overwrite data. It then adds your own demo customers from
+   `local/customers.json`, if you made one: git ignores it, and they survive `--reset`, login included
+   ([`local/README.md`](local/README.md)).
 
 The services start only after they succeed. To reload the demo data:
 
