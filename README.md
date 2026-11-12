@@ -286,27 +286,27 @@ committed in `solution/`.
 |---|---|---|---|---|
 | 1 | Guest asks what a subscription includes and whether premium events cost extra | classifier → knowledge agent (top article scored 0.78) | Resolved with an answer grounded in the subscription and tiers articles | None (guest) |
 | 2 | Cathy asks about her reservations, then says "cancel that one" | account agent: `get_my_reservations`, then `cancel_my_reservation` | Resolved. The follow-up relied on short-term memory, and the reservation was cancelled with the credit returned | Cancellation memory dropped by the filter |
-| 3 | Guest asks to book Samba Night, then gives their email | request_info → customer identified → account agent: `find_experiences`, `book_experience` | Resolved. Bob already had that booking, and the tool refused a duplicate | None (no duplicate of his stored preference) |
+| 3 | Guest asks to book Samba Night, then gives their email | request_info → customer identified → account agent: `find_experiences` | Resolved. The search result said Bob already had that booking, so the agent told him instead of trying to book it again | None (no duplicate of his stored preference) |
 | 4 | Alice, whose account is blocked, can't log in | supervisor → escalation agent | Escalated to Trust & Safety (high priority) without revealing the reason for the block | Login issue recorded |
 | 5 | Frank was charged twice | account agent: `request_refund` | Escalated to billing for support-lead approval, with no refund amount or timeline promised | Double charge and refund request recorded |
 | 6 | Bob still can't log in after a password reset | supervisor → escalation agent (repeat issue: his previous ticket was a login problem) | Escalated to technical support | Login issue recorded |
-| 7 | Bob asks for a recommendation | account agent: `find_experiences` | Suggested real upcoming Rio experiences that match his stored music and dance preference and his premium tier, skipping Samba Night, which he already booked | None |
+| 7 | Bob asks for a recommendation | account agent: `recommend_experiences` | Said plainly that nothing he can book this week matches his stored music and dance preference (he already has Samba Night and the Carnival tour), and offered Christ the Redeemer as an alternative without claiming it fits | None |
 | 8 | Cathy demands a real person | supervisor → escalation agent | Escalated immediately | None (one-off request) |
-| 9 | Guest says the app keeps crashing | knowledge agent (top article: App Crashes and Technical Problems, 0.55) | Answered with the article's steps; waits for the customer to try them | None (guest) |
+| 9 | Guest says the app keeps crashing | knowledge agent (top article: App Crashes and Technical Problems, 0.55) | Resolved with the article's steps, offering to escalate if they don't work | None (guest) |
 | 10 | Guest asks about a student discount | knowledge agent: no article above the 0.30 threshold | Escalated: "no relevant knowledge base article found" | None (guest) |
 | 11 | Guest asks about parking at venues | knowledge agent: only related articles (QR codes, 0.41) | Escalated: the quality gate found the articles don't answer the question | None (guest) |
-| 12 | Frank says he loves outdoor activities | account agent: `find_experiences` | Answered, and the preference was stored in long-term memory | "Likes outdoor activities and nature" |
-| 13 | Frank asks for recommendations, in a new session | account agent, with the preference recalled from `udahub.db` | Suggested outdoor experiences from the catalog | None (already known) |
+| 12 | Frank says he loves outdoor activities | account agent: `recommend_experiences`, with the interest he just stated | Sunset Paddleboarding and the Ibirapuera Park bike ride, each with why it fits; the preference was stored in long-term memory | "Likes outdoor activities and nature" |
+| 13 | Frank asks for recommendations, in a new session | account agent: `recommend_experiences`, with the preference recalled from `udahub.db` | The same two outdoor experiences | None (already known) |
 
 The safeguards each did their job during the run:
 
 - **Knowledge grounding:** a cell in the notebook shows the right article retrieved for six kinds of ticket, and none for questions the knowledge base doesn't cover. Scenarios 10 and 11 show the two ways a question without a supporting article is escalated, instead of being answered with advice the articles don't contain.
-- **Id guard:** in most of our runs of scenario 2, the agent first tried to cancel with an id it guessed. The tool refused it, and the agent looked the reservation up before cancelling. In other runs, including the committed one, the agent looked it up first. Either way the outcome is the same, and `test_account_tools_refuse_ids_not_looked_up` checks the guard directly.
+- **Id guard:** in most of our runs of scenario 2, the agent first tried to cancel with an id it guessed. The tool refused it, and the agent looked the reservation up before cancelling. The committed run is one of them; in other runs the agent looked it up first. Either way the outcome is the same, and `test_account_tools_refuse_ids_not_looked_up` checks the guard directly.
 - **Policy escalation:** refunds and blocked accounts always reached a human, whatever the model drafted.
 - **Repeat issues:** in scenario 6 Bob's previous ticket was a login problem, so the supervisor escalated him straight away. This took the same route in 4 out of 4 runs.
 - **Memory hygiene:** memories are third-person summaries of what the customer wrote, never the assistant's replies. Reservation state, named experiences, one-off requests, contact details and duplicates are not stored.
 
-The model's wording varies from run to run, but the routes and outcomes above were the same across repeated runs.
+The model's wording varies from run to run. Before the last two fixes (report section 6), two results also varied: asked later whether the cancellation went through, the agent sometimes answered from the conversation without checking, and the gate escalated it; and Frank's first recommendation sometimes included the Carnival history tour as an outdoor activity. Both passed 5 of 5 targeted runs after the fixes.
 
 ### Evaluation results
 

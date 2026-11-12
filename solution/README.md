@@ -76,23 +76,23 @@ The demos make real changes: bookings and cancellations, plus new tickets and me
 |---|---|---|---|
 | 1 | Guest asks what a subscription includes | knowledge_agent (top article scored 0.78) → resolved | None (guest) |
 | 2 | Cathy asks about her reservations, then "cancel that one" | account_agent lists them, then cancels on the follow-up (short-term memory) → resolved | Cancellation dropped by the filter |
-| 3 | Guest asks to book Samba Night, then gives their email | request_info → Bob identified → account_agent finds he already has that booking | None (no duplicate preference) |
+| 3 | Guest asks to book Samba Night, then gives their email | request_info → Bob identified → account_agent's search shows he already has that booking, so it tells him | None (no duplicate preference) |
 | 4 | Alice (blocked account) can't log in | supervisor → escalated to Trust & Safety without revealing the reason for the block | Login issue recorded |
 | 5 | Frank was charged twice | account_agent → `request_refund` → escalated to billing for support-lead approval | Refund request recorded |
 | 6 | Bob still can't log in | supervisor → escalated to technical support as a repeat issue (his previous ticket was a login problem) | Login issue recorded |
-| 7 | Bob asks for a recommendation | account_agent → `find_experiences` → real Rio experiences matching his stored preference and premium tier, skipping the one he already booked | None |
+| 7 | Bob asks for a recommendation | account_agent → `recommend_experiences` → nothing he can book matches his music and dance preference, so it says so and offers one alternative without claiming it fits | None |
 | 8 | Customer demands a human | Escalated immediately | None (one-off request) |
 | 9 | Guest says the app keeps crashing | knowledge_agent (App Crashes article, 0.55) → answered with its steps | None (guest) |
 | 10 | Guest asks about a student discount | knowledge_agent finds no article above 0.30 → escalated ("no relevant knowledge base article found") | None (guest) |
 | 11 | Guest asks about parking | knowledge_agent finds only related articles → quality gate: they don't answer it → escalated | None (guest) |
-| 12 | Frank says he loves outdoor activities | account_agent answers; the preference is stored in long-term memory | "Likes outdoor activities and nature" |
-| 13 | Frank asks for recommendations, in a new session | account_agent, with the preference recalled from `udahub.db` → outdoor experiences | None (already known) |
+| 12 | Frank says he loves outdoor activities | account_agent → `recommend_experiences` with the interest he just stated → the two outdoor experiences; the preference is stored in long-term memory | "Likes outdoor activities and nature" |
+| 13 | Frank asks for recommendations, in a new session | account_agent, with the preference recalled from `udahub.db` → the same two outdoor experiences | None (already known) |
 
 In most of our runs of scenario 2, the agent first tried to cancel with a guessed id. The tool refused it, and
-the agent looked the reservation up before cancelling. In other runs, including the committed one, it looked the
+the agent looked the reservation up before cancelling. The committed run is one of them; in other runs it looked the
 reservation up first. The outcome is the same either way, and `test_account_tools_refuse_ids_not_looked_up`
-checks the guard directly. The model's wording varies between runs, but the routes and outcomes were the same
-across repeated runs.
+checks the guard directly. The model's wording varies between runs. Asked later whether the cancellation went through, the agent now checks
+the reservation with a tool instead of answering from the conversation, which the quality gate used to escalate.
 
 ## Tests
 

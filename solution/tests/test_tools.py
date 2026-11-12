@@ -526,3 +526,19 @@ def test_recommendations_without_preferences_list_bookable_options():
     result = tools["recommend_experiences"].invoke({})
     assert result["preferences"] == [] and "without saying they fit" in result["note"]
     assert result["experiences"] and all(e["can_book"] for e in result["experiences"])
+
+
+def test_recommendations_use_interests_stated_in_the_conversation(monkeypatch):
+    """A preference the customer states in this message is only stored after the reply, so the agent passes it
+    in: without it, Frank's first "I love outdoor activities" got the unfiltered catalog."""
+    from agentic.tools import recommendations
+    tools = {t.name: t for t in cp.build_account_tools(BOB, "t-rec", [])}
+    walk = next(e["experience_id"] for e in tools["find_experiences"].invoke({})
+                if e["title"] == "Pelourinho Colonial Walk")
+    monkeypatch.setattr(recommendations, "get_llm", lambda: _ScriptedMatcher([
+        {"experience_id": walk, "preference": "historic walking tours", "why": "a walk"},
+        {"experience_id": walk, "preference": "made-up interest", "why": "not stated"},
+    ]))
+    result = tools["recommend_experiences"].invoke({"interests": " historic walking tours "})
+    assert result["preferences"] == ["historic walking tours"]
+    assert [(m["experience_id"], m["fits_preference"]) for m in result["matches"]] == [(walk, "historic walking tours")]

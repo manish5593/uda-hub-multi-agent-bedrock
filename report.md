@@ -16,7 +16,7 @@ sessions.
 | **Data** | Two SQLite databases: `cultpass.db` (customers, subscriptions, experiences, reservations) and `udahub.db` (tickets, messages, 18 knowledge articles, long-term memory). As microservices, the same tables in Postgres, one database per service, with the knowledge embeddings stored in pgvector |
 | **Deployment** | `service/`: an API gateway and five services (agent, CultPass, tickets, knowledge, auth) with Postgres and pgvector, Alembic migrations, Docker Compose, customer sign-up and login with JWTs, Prometheus with a Grafana dashboard, optional Langfuse tracing, and a web chat for demos (section 4). Run end to end with the real model |
 | **Demonstration** | `solution/03_agentic_app.ipynb`, committed with the outputs of a real-model run: 13 scenarios, 5 edge cases, and demos of routing, retrieval, tools, memory and logs |
-| **Tests** | 85 offline tests in `solution/tests` (35 unit, 20 end-to-end through the graph with a scripted model, 26 for the evaluation suite, 4 for tracing) and 108 in `service/tests` (services, customer logins and tokens, the full HTTP flow, migrations on SQLite and Postgres, and the pgvector index on Postgres). No API key needed; GitHub Actions runs them on every pull request |
+| **Tests** | 86 offline tests in `solution/tests` (36 unit, 20 end-to-end through the graph with a scripted model, 26 for the evaluation suite, 4 for tracing) and 108 in `service/tests` (services, customer logins and tokens, the full HTTP flow, migrations on SQLite and Postgres, and the pgvector index on Postgres). No API key needed; GitHub Actions runs them on every pull request |
 | **Evaluation** | `solution/evals`: 36 labelled tickets, 3 runs each, against the real model, scored in code and by an LLM judge. **108 of 108 runs (100%) passed every check** in the latest evaluation, up from 95 (88%) at the first one; the runs in between scored 94–99%, so expect a run to miss one or two (section 5) |
 | **Environment** | Python 3.11, LangGraph 1.2.20, LangChain 1.4.9, langchain-openai 1.7.4, langchain-aws 1.9.2, SQLAlchemy 2.1, FastAPI 0.162, Postgres 16 with pgvector 0.8.7, PyJWT 2.15, bcrypt 5.0, Langfuse 4.78 (SDK 5.2) |
 
@@ -223,18 +223,18 @@ Results from the committed run of notebook 03 against the real model:
 | 4 | Blocked customer can't log in | escalation | Trust & Safety, without revealing why the account is blocked |
 | 5 | Customer charged twice | account agent → `request_refund` | Escalated to billing for approval |
 | 6 | Login still failing after a reset | escalation (repeat issue) | Technical support |
-| 7 | Bob asks for a recommendation | account agent | Rio experiences matching his stored preference, skipping one he already booked |
+| 7 | Bob asks for a recommendation | account agent → `recommend_experiences` | Told honestly that nothing he can book matches his music and dance preference; one alternative offered, not claimed to fit |
 | 8 | Customer demands a human | escalation | Escalated immediately |
 | 9 | App keeps crashing | knowledge agent | Answered with the article's troubleshooting steps |
 | 10 | Student discount? | knowledge agent | No relevant article, so escalated |
 | 11 | Parking at venues? | knowledge agent | Only related articles; the quality gate saw they don't answer it, so escalated |
-| 12 | Frank says he loves outdoor activities | account agent | Answered; the preference was stored |
-| 13 | Frank asks for recommendations in a new session | account agent | Preference recalled from the database; outdoor experiences suggested |
+| 12 | Frank says he loves outdoor activities | account agent → `recommend_experiences` | The two outdoor experiences; the preference was stored |
+| 13 | Frank asks for recommendations in a new session | account agent → `recommend_experiences` | Preference recalled from the database; the same two suggested |
 
-Across the run there were 6 resolved, 4 waiting on the customer, and 6 escalated, each escalation to the
+Across the run there were 9 resolved, 1 waiting on the customer, and 6 escalated, each escalation to the
 appropriate team. The 5 edge cases are an empty message, gibberish, an unknown customer, an unknown account, and
-a simulated LLM outage. All were handled without a crash. The routes and outcomes above were the same across repeated runs; the
-model's wording varies.
+a simulated LLM outage. All were handled without a crash. The model's wording varies between runs; the last two fixes in section 6
+made the cancellation check and Frank's first recommendation consistent as well.
 
 ### Evaluation
 
@@ -360,6 +360,8 @@ cases, then the full evaluation:
 | **The agent told Cathy her own reservation was her friend Bob's.** | Reservations are labelled with who booked them (the customer being served), and the gate treats claims about anyone else's account as ungrounded. |
 | **Recommendations were padded.** When nothing new matched Bob's taste for music and dance, the agent added a sightseeing tour that "fits your interests". Embedding similarity couldn't separate them either: Christ the Redeemer scores 0.47 against "music and dance in Rio", the Carnival tour 0.46. | A `recommend_experiences` tool. Code passes only experiences the customer can book, and asks the model one narrow structured question: which of them clearly fit a stored preference, quoted exactly. Answers that name an unknown experience or preference are dropped. When nothing fits, it says so and offers alternatives labelled as not matching. |
 | **A booking reply gave a wrong reservation id.** The model copied `23e89` for a 6-character id. | Every id-like token in the account agent's draft must be one the tools returned. A wrong one is corrected when the turn made exactly one booking. |
+| **A preference stated in the message was ignored.** "I love outdoor activities, what can I book?" is stored as a preference only after the reply, so `recommend_experiences` found none and returned every bookable experience. The agent picked the "outdoor" ones itself and included a Carnival history tour. Found by re-running notebook 03. | The tool takes the `interests` the customer states in the conversation, matched with the stored ones; the agent may not pass interests the customer didn't state. 5 of 5 targeted runs then recommended only the two outdoor experiences. |
+| **"Did my cancellation go through?" was answered from the conversation.** The agent repeated what it said earlier without checking, the gate saw no evidence for it, and the ticket was escalated. Found by re-running notebook 03. | The agent checks the account's current state with a tool before confirming it: earlier messages say what was done then, not what is true now. 5 of 5 targeted runs then checked and resolved it. |
 | **The judge flagged correct replies.** It counted "you might enjoy" as a claim, didn't know what `already_booked` meant, and flagged sentences an article gives as its suggested phrasing. | The judge's prompt covers each, and it sees the customer's stored preferences. Each flag was checked against the evidence first: every one was a correct reply. |
 
 ## 7. Lessons

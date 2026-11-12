@@ -340,10 +340,14 @@ def build_account_tools(user_id: str, ticket_id: str, memories: Optional[list[st
             "note": "Refunds require support-lead approval; do not promise an amount or timeline.",
         }
 
-    def recommend_experiences(location: str = "") -> dict:
-        """Recommend experiences for the customer: the upcoming ones they can book that fit their stored preferences. Use this for any recommendation, instead of choosing from find_experiences yourself. `location` optionally limits it to a city or state."""
+    def recommend_experiences(location: str = "", interests: str = "") -> dict:
+        """Recommend experiences for the customer: the upcoming ones they can book that fit their stored preferences. Use this for any recommendation, instead of choosing from find_experiences yourself. `location` optionally limits it to a city or state. `interests`: what the customer says they like in this conversation, in their words (e.g. "outdoor activities and nature"); it is matched along with the stored preferences. Leave it empty when they haven't said."""
         from agentic.tools.recommendations import match_preferences, stored_preferences
         preferences = stored_preferences(memories)
+        # A preference stated in this message is only stored after the reply, so it has to come in here
+        stated = interests.strip()
+        if stated and stated.lower() not in {p.lower() for p in preferences}:
+            preferences.append(stated)
         candidates = [e for e in find_experiences(location=location) if e["can_book"]]
         if not preferences:
             return {"preferences": [], "experiences": candidates,
