@@ -6,7 +6,7 @@ from langchain_core.messages import AIMessage, SystemMessage, ToolMessage
 from langchain.agents import create_agent
 from langgraph.errors import GraphRecursionError
 
-from agentic.agents.common import add_trace, conversation, customer_context_block
+from agentic.agents.common import add_trace, conversation, customer_context_block, text_of
 from agentic.llm import get_llm
 from agentic.tools.cultpass_tools import build_account_tools
 from agentic.tools.knowledge_tools import build_knowledge_tool
@@ -121,7 +121,7 @@ def resolve_with_account_tools(state: dict) -> dict:
                                error="recursion_limit"),
         }
     actions = _actions(result["messages"])
-    draft, fixed = correct_ids(result["messages"][-1].content, actions)
+    draft, fixed = correct_ids(text_of(result["messages"][-1]), actions)
     if fixed:
         state = {**state, "trace": add_trace(state, f"[account_agent] corrected ids in the draft: {fixed}",
                                              event="correct_ids", fixed=fixed)}

@@ -6,7 +6,7 @@ business rules on top of that classification.
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from agentic import config, verification
-from agentic.agents.common import add_trace, last_user_message
+from agentic.agents.common import add_trace, last_user_message, text_of
 from agentic.agents.memory_agent import build_customer, recall
 from agentic.llm import get_llm
 from agentic.tools import cultpass_tools, ticket_tools
@@ -155,7 +155,7 @@ def _in_customer_language(message: str, language: str) -> str:
         return message
     reply = get_llm().invoke([SystemMessage(content=TRANSLATE_PROMPT.format(language=language)),
                               HumanMessage(content=message)])
-    return reply.content.strip() or message
+    return text_of(reply).strip() or message
 
 
 # What request_info says for each step of verifying a typed email. The text never says whether the email

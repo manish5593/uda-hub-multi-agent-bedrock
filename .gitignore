@@ -9,3 +9,4 @@ solution/logs/
 llm.env
 solution/evals/results/
 service/local/customers.json
+email.env

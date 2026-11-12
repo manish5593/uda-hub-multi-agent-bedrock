@@ -132,6 +132,10 @@ services:
   auth:
     <<: *backend
     command: ["uvicorn", "service.auth_service.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    # Sending codes by email (email.env, optional; see email.env.example)
+    env_file:
+      - path: email.env
+        required: false
     environment:
       <<: *common-env
       AUTH_DB_URL: postgresql+psycopg://auth_svc:${AUTH_DB_PASSWORD}@db:5432/auth
@@ -146,8 +150,11 @@ services:
   agent:
     <<: *backend
     command: ["uvicorn", "service.agent_service.main:app", "--host", "0.0.0.0", "--port", "8000"]
-    # Chat model settings and credentials
-    env_file: [llm.env]
+    # Chat model settings and credentials, then sending codes by email (email.env, optional)
+    env_file:
+      - path: llm.env
+      - path: email.env
+        required: false
     environment:
       <<: *common-env
       CULTPASS_SERVICE_URL: http://cultpass:8000

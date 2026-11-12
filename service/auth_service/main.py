@@ -9,7 +9,7 @@ Login takes two steps (AUTH_LOGIN_CODES, on by default): the password, then a co
 email, so a stolen password alone is not enough. With AUTH_LOGIN_CODES=false, /login returns the token directly.
 
 Only CultPass customers can sign up, and only by proving they own the email: the code goes to that
-address. In this demo the code is written to the service log instead of emailed (`deliver_code`). The
+address, by Amazon SES or, by default, in the service log instead (`deliver_code`, agentic/mailer.py). The
 responses never reveal whether an email belongs to a customer or already has a login.
 
 Passwords are stored as bcrypt hashes. After AUTH_MAX_FAILED_LOGINS wrong passwords or login codes in a row,
@@ -32,6 +32,7 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
+from agentic import mailer
 from agentic.tools import cultpass_tools
 from service.auth_service.models import Credential, LoginCode, VerificationCode
 from service.common.app import create_app, ping_database
@@ -98,9 +99,8 @@ _DUMMY_HASH = hash_password(secrets.token_urlsafe(16))
 
 
 def deliver_code(email: str, code: str, purpose: str = "sign-up") -> None:
-    """Demo delivery: log the code. Replace with an email provider in production, and stop logging codes."""
-    label = "Login code" if purpose == "login" else "Verification code"
-    logger.warning("%s for %s: %s (demo delivery: logged, not emailed)", label, email, code)
+    """Email the code with Amazon SES, or log it for demos (agentic/mailer.py, UDAHUB_EMAIL_PROVIDER)."""
+    mailer.send_code(email, code, purpose)
 
 
 @asynccontextmanager

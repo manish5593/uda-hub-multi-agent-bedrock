@@ -9,3 +9,4 @@ solution/logs
 solution/*.ipynb
 service/tests
 service/local
+**/email.env

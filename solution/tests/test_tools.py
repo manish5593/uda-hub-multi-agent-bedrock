@@ -542,3 +542,62 @@ def test_recommendations_use_interests_stated_in_the_conversation(monkeypatch):
     result = tools["recommend_experiences"].invoke({"interests": " historic walking tours "})
     assert result["preferences"] == ["historic walking tours"]
     assert [(m["experience_id"], m["fits_preference"]) for m in result["matches"]] == [(walk, "historic walking tours")]
+
+
+def test_replies_made_of_content_blocks_are_read_as_text():
+    """Bedrock's Converse API can return a reply as a list of blocks, which crashed the agents."""
+    from langchain_core.messages import AIMessage
+    from agentic.agents.common import text_of
+    blocks = AIMessage(content=[{"type": "text", "text": "Your booking "}, {"type": "tool_use", "id": "t1"},
+                                {"type": "text", "text": "is confirmed."}])
+    assert text_of(blocks) == "Your booking is confirmed."
+    assert text_of(AIMessage(content="plain")) == "plain"
+
+
+class _FakeSES:
+    def __init__(self, fail=False):
+        self.sent, self.fail = [], fail
+
+    def send_email(self, **kwargs):
+        if self.fail:
+            raise RuntimeError("MessageRejected")
+        self.sent.append(kwargs)
+
+
+def test_codes_are_emailed_with_ses_and_never_logged(monkeypatch, caplog):
+    from agentic import mailer
+    ses = _FakeSES()
+    monkeypatch.setattr(mailer, "_ses", lambda: ses)
+    monkeypatch.setenv("UDAHUB_EMAIL_PROVIDER", "ses")
+    monkeypatch.setenv("UDAHUB_EMAIL_FROM", "support@example.com")
+    with caplog.at_level("INFO"):
+        assert mailer.send_code("bob.stone@granite.com", "482913", "login") is True
+    email = ses.sent[0]
+    assert email["FromEmailAddress"] == "support@example.com"
+    assert email["Destination"] == {"ToAddresses": ["bob.stone@granite.com"]}
+    assert "login code" in email["Content"]["Simple"]["Subject"]["Data"]
+    assert "482913" in email["Content"]["Simple"]["Body"]["Text"]["Data"]
+    assert "482913" not in caplog.text
+
+
+def test_a_failed_email_falls_back_to_the_log_only_when_allowed(monkeypatch, caplog):
+    from agentic import mailer
+    monkeypatch.setattr(mailer, "_ses", lambda: _FakeSES(fail=True))
+    monkeypatch.setenv("UDAHUB_EMAIL_PROVIDER", "ses")
+    monkeypatch.setenv("UDAHUB_EMAIL_FROM", "support@example.com")
+    with caplog.at_level("INFO"):
+        assert mailer.send_code("bob.stone@granite.com", "482913", "chat") is False
+    assert "482913" in caplog.text and "MessageRejected" in caplog.text   # demo: logged so the demo goes on
+    caplog.clear()
+    monkeypatch.setenv("UDAHUB_EMAIL_LOG_FALLBACK", "false")
+    with caplog.at_level("INFO"):
+        mailer.send_code("bob.stone@granite.com", "482913", "chat")
+    assert "482913" not in caplog.text                                        # production: never logged
+
+
+def test_codes_are_logged_by_default(monkeypatch, caplog):
+    from agentic import mailer
+    monkeypatch.delenv("UDAHUB_EMAIL_PROVIDER", raising=False)
+    with caplog.at_level("INFO"):
+        assert mailer.send_code("bob.stone@granite.com", "482913") is False
+    assert "Verification code for bob.stone@granite.com: 482913" in caplog.text

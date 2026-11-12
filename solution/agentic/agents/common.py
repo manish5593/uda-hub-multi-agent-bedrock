@@ -7,6 +7,18 @@ from agentic import config
 from agentic.event_log import log_event
 
 
+def text_of(message) -> str:
+    """A message's text. OpenAI replies are a string; Bedrock's Converse API can return a list of content blocks
+    (text, tool use, reasoning), which crashed every place that treated the reply as text."""
+    content = getattr(message, "content", message)
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return "".join(b if isinstance(b, str) else b.get("text", "") for b in content
+                       if isinstance(b, str) or (isinstance(b, dict) and b.get("type") == "text"))
+    return str(content or "")
+
+
 def add_trace(state: dict, entry: str, event: str = "note", ticket_id=None, **fields) -> list[str]:
     """Record one agent decision: in the ticket's `trace` (for display) and as a structured event in
     the searchable event log. `entry` starts with the agent's name in brackets, e.g. "[supervisor] ..."."""
@@ -18,13 +30,13 @@ def add_trace(state: dict, entry: str, event: str = "note", ticket_id=None, **fi
 def last_user_message(state: dict) -> str:
     for msg in reversed(state.get("messages", [])):
         if isinstance(msg, HumanMessage):
-            return msg.content
+            return text_of(msg)
     return ""
 
 
 def conversation(state: dict, limit: int = config.MAX_CONVERSATION_MESSAGES) -> list[BaseMessage]:
     """Customer-facing conversation of this session (short-term memory)."""
-    msgs = [m for m in state.get("messages", []) if isinstance(m, (HumanMessage, AIMessage)) and m.content]
+    msgs = [m for m in state.get("messages", []) if isinstance(m, (HumanMessage, AIMessage)) and text_of(m)]
     return msgs[-limit:]
 
 
@@ -32,7 +44,7 @@ def conversation_text(state: dict) -> str:
     lines = []
     for m in conversation(state):
         role = "Customer" if isinstance(m, HumanMessage) else "Assistant"
-        lines.append(f"{role}: {m.content}")
+        lines.append(f"{role}: {text_of(m)}")
     return "\n".join(lines)
 
 

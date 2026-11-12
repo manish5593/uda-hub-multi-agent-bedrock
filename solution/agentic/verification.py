@@ -19,6 +19,8 @@ import secrets
 from datetime import UTC, datetime, timedelta
 from typing import Optional
 
+from agentic import mailer
+
 logger = logging.getLogger("udahub")
 
 CODE_TTL = timedelta(minutes=int(os.getenv("UDAHUB_VERIFY_CODE_TTL_MINUTES", "10")))
@@ -44,8 +46,8 @@ def _hash(email: str, code: str) -> str:
 
 
 def deliver_code(email: str, code: str) -> None:
-    """Demo delivery: log the code, as the auth service does. Replace with an email provider in production."""
-    logger.warning("Verification code for %s: %s (demo delivery: logged, not emailed)", email, code)
+    """Email the code with Amazon SES, or log it for demos (agentic/mailer.py, UDAHUB_EMAIL_PROVIDER)."""
+    mailer.send_code(email, code, "chat")
 
 
 def find_code(text: str) -> Optional[str]:

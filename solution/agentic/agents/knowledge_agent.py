@@ -1,7 +1,7 @@
 """Knowledge resolver: answers how-to and policy questions with RAG over the knowledge base."""
 from langchain_core.messages import SystemMessage
 
-from agentic.agents.common import add_trace, conversation, customer_context_block, last_user_message
+from agentic.agents.common import add_trace, conversation, customer_context_block, last_user_message, text_of
 from agentic.llm import get_llm
 from agentic.tools.knowledge_tools import format_articles, get_retriever
 
@@ -45,7 +45,7 @@ def resolve_with_knowledge(state: dict) -> dict:
     ])
     return {
         "knowledge": articles,
-        "draft_response": response.content,
+        "draft_response": text_of(response),
         "resolver": "knowledge_agent",
         "trace": add_trace(state, f"[knowledge_agent] retrieved {titles}", event="retrieve",
                            articles=[{"title": a["title"], "score": a["score"]} for a in articles]),
