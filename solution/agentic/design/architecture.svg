@@ -63,7 +63,7 @@
 <path d="M500 485 V518 H432" fill="none" stroke="#4a5568" stroke-width="1.6" marker-end="url(#arrow)"/>
 <rect x="310" y="505" width="120" height="50" rx="10" fill="#ffe8d6" stroke="#c05621" stroke-width="1.6"/>
 <text x="370.0" y="535.0" class="t">quality_gate</text>
-<text x="360" y="600" class="l" text-anchor="end">confidence ≥ 0.7, grounded, policy OK?</text>
+<text x="360" y="600" class="l" text-anchor="end">confidence ≥ 0.7, grounded, answers it, policy OK?</text>
 <path d="M430 545 H640 V450 H676" fill="none" stroke="#4a5568" stroke-width="1.6" stroke-dasharray="6 4" marker-end="url(#arrow)"/>
 <text x="648" y="505" class="l" text-anchor="start">no → escalate</text>
 <path d="M370 555 V632" fill="none" stroke="#4a5568" stroke-width="1.6" stroke-dasharray="6 4" marker-end="url(#arrow)"/>

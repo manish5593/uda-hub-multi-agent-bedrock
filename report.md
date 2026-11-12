@@ -12,13 +12,13 @@ sessions.
 | | |
 |---|---|
 | **Architecture** | Supervisor pattern in LangGraph: 7 agents in one `StateGraph` (11 nodes, 16 edges) |
-| **Models** | `gpt-4o-mini` for every agent and `text-embedding-3-small` for retrieval (the demo run). Claude on Amazon Bedrock, Titan embeddings and a SageMaker embedding endpoint are implemented as alternatives, but not yet run |
-| **Data** | Two SQLite databases: `cultpass.db` (customers, subscriptions, experiences, reservations) and `udahub.db` (tickets, messages, 18 knowledge articles, long-term memory). As microservices, the same tables in Postgres, one database per service |
-| **Deployment** | `service/`: an API gateway and five services (agent, CultPass, tickets, knowledge, auth) with Postgres, Alembic migrations, Docker Compose, customer sign-up and login with JWTs, Prometheus with a Grafana dashboard, and optional Langfuse tracing (section 4) |
+| **Models** | `gpt-4o-mini` for every agent and `text-embedding-3-small` for retrieval (the demo run, the full stack and the evaluation), with `gpt-4o` as the evaluation's judge. Claude on Amazon Bedrock (Claude Haiku 4.5 by default), Titan embeddings and a SageMaker embedding endpoint are implemented as alternatives; Bedrock answered test calls, but a full run waits on AWS account approval (section 4) |
+| **Data** | Two SQLite databases: `cultpass.db` (customers, subscriptions, experiences, reservations) and `udahub.db` (tickets, messages, 18 knowledge articles, long-term memory). As microservices, the same tables in Postgres, one database per service, with the knowledge embeddings stored in pgvector |
+| **Deployment** | `service/`: an API gateway and five services (agent, CultPass, tickets, knowledge, auth) with Postgres and pgvector, Alembic migrations, Docker Compose, customer sign-up and login with JWTs, Prometheus with a Grafana dashboard, optional Langfuse tracing, and a web chat for demos (section 4). Run end to end with the real model |
 | **Demonstration** | `solution/03_agentic_app.ipynb`, committed with the outputs of a real-model run: 13 scenarios, 5 edge cases, and demos of routing, retrieval, tools, memory and logs |
-| **Tests** | 74 offline tests in `solution/tests` (24 unit, 20 end-to-end through the graph with a scripted model, 26 for the evaluation suite, 4 for tracing) and 101 in `service/tests` (services, customer logins and tokens, the full HTTP flow, migrations on SQLite and Postgres). No API key needed; GitHub Actions runs them on every pull request |
-| **Evaluation** | `solution/evals`: 36 labelled tickets run against the real model, scored in code and by an LLM judge (section 4). Built, but not yet run: the course API key was suspended |
-| **Environment** | Python 3.11, LangGraph 1.2.20, LangChain 1.4.9, langchain-openai 1.7.4, langchain-aws 1.9.2, SQLAlchemy 2.1, FastAPI 0.162, Postgres 16, PyJWT 2.15, bcrypt 5.0, Langfuse 4.78 (SDK 5.2) |
+| **Tests** | 74 offline tests in `solution/tests` (24 unit, 20 end-to-end through the graph with a scripted model, 26 for the evaluation suite, 4 for tracing) and 108 in `service/tests` (services, customer logins and tokens, the full HTTP flow, migrations on SQLite and Postgres, and the pgvector index on Postgres). No API key needed; GitHub Actions runs them on every pull request |
+| **Evaluation** | `solution/evals`: 36 labelled tickets, 3 runs each, against the real model, scored in code and by an LLM judge. **95 of 108 runs (88%) pass every check**; policy, safety, language, routing and knowledge-gap cases pass in every run (section 5) |
+| **Environment** | Python 3.11, LangGraph 1.2.20, LangChain 1.4.9, langchain-openai 1.7.4, langchain-aws 1.9.2, SQLAlchemy 2.1, FastAPI 0.162, Postgres 16 with pgvector 0.8.7, PyJWT 2.15, bcrypt 5.0, Langfuse 4.78 (SDK 5.2) |
 
 The main lesson matched what I'd learned building earlier agent systems: **the LLM proposes, code decides.**
 Almost every problem found by running the system against the real model was a decision left to the model that
@@ -110,11 +110,11 @@ So the agents, prompts, tools and rules are unchanged, and each business rule is
 
 | Part | What it adds |
 |---|---|
-| `gateway` | The only public endpoint: API keys for channel integrations, JWT access tokens for logged-in customers (who only see their own tickets), a rate limit per caller, request ids, and replies without internal traces |
+| `gateway` | The only public endpoint: API keys for channel integrations, JWT access tokens for logged-in customers (who only see their own tickets), a rate limit per caller, request ids, and replies without internal traces. It also serves a web chat for demos (`/demo`) |
 | `agent` | Runs the workflow. Conversations are kept in Postgres (`PostgresSaver`), so they survive restarts and any replica can continue any ticket; an advisory lock stops two messages on one ticket from running at once |
-| `cultpass`, `tickets`, `knowledge` | Own their data, each in its own Postgres database and role |
+| `cultpass`, `tickets`, `knowledge` | Own their data, each in its own Postgres database and role. The knowledge service keeps the article embeddings there too, with pgvector |
 | `auth` | Customer sign-up, verified by a code sent to the CultPass email, and login. Stores bcrypt password hashes, locks a login after repeated failures, and issues the access tokens the gateway verifies |
-| `db-setup`, `migrate`, `seed` jobs | Any missing database and role, Alembic migrations, one history per database, then the demo data. Databases created before the migrations are adopted, not recreated |
+| `db-setup`, `migrate`, `seed` jobs | Any missing database and role and the pgvector extension, Alembic migrations, one history per database, then the demo data. Databases created before the migrations are adopted, not recreated |
 | Monitoring | Request metrics on every service, plus what the agent did with each message (outcome, route, escalation team and priority, tools). Prometheus collects them, and a provisioned Grafana dashboard shows support outcomes, traffic, errors and latency |
 | Tracing (optional) | Langfuse, self-hosted: every graph run, node, model call and tool call, grouped by ticket |
 
@@ -150,13 +150,45 @@ tool call, grouped into a session per ticket. It is self-hosted in the same Dock
 ClickHouse, Redis and MinIO, under a `langfuse` profile), and it is off unless its keys are set, so the
 notebooks, the tests and the plain stack are unchanged. The user shown is the CultPass id, never the email.
 
+### Embeddings in Postgres (pgvector)
+
+In the notebooks the knowledge index is built in memory on every start. As microservices that meant every
+restart embedded all 18 articles again, and every replica of the knowledge service held its own copy. The
+knowledge service now keeps the embeddings in its own database with pgvector:
+
+- **Only new or changed articles are embedded.** Each row stores a hash of the embedded text, so a restart embeds
+  nothing and an edited article is embedded again on its own.
+- **One shared index** for every replica.
+- **Each embedding model keeps its own vectors**, so switching from OpenAI to Titan never compares vectors from
+  different models.
+- **Same scores:** pgvector's cosine distance gives the same similarity as the in-memory store, so the 0.30
+  threshold and every retrieval rule are unchanged.
+
+The table is a derived index that can be rebuilt from the articles at any time, so the service creates it
+itself, outside the Alembic migrations, like the agent's checkpoint tables. The image is `postgres:16-alpine`
+with pgvector compiled in, so the existing data volume kept working. Without pgvector the service logs a
+warning and keeps the index in memory, and the notebooks still use the in-memory index.
+
 ### Running it
 
-The whole stack has been built and run with Docker Compose: the gateway, health checks, migrations, seeding,
-metrics and dashboard, Langfuse, which recorded a trace for each message, and customer sign-up and login, where
-the token, not the metadata, decided who the customer was and another customer's ticket answered `404`. Those
-runs used a placeholder model key, so every message got the fallback reply. The course key is still suspended,
-so a full run with the real model needs a new OpenAI key or Bedrock credentials.
+The whole stack has been run end to end with the real model (`gpt-4o-mini`): 15 long-running containers
+(gateway, five services, Postgres with pgvector, Prometheus, Grafana, and Langfuse with its five stores and worker), with migrations and seeding,
+then the 13 notebook scenarios (16 turns) sent through the gateway:
+
+- **Every turn behaved as in the committed notebook run**, with no errors: 6 resolved, 4 waiting on the
+  customer and 6 escalated, each to the right team (Trust & Safety, billing, technical support, general support).
+- **Changes were real:** Cathy's reservation was cancelled in the CultPass database, and Frank's refund request
+  was saved as an internal note for approval.
+- **Logins:** sign-up with the emailed code, login, and a wrong password (`401`). A customer who put another
+  customer's email in the metadata was still identified from the token, and another customer's ticket answered
+  `404`.
+- **Monitoring and tracing:** Prometheus counted every turn by outcome and every escalation by team, and Langfuse
+  recorded a trace per message.
+- **Replies took 1.2 to 13 seconds**, with a median of about 5.
+
+Amazon Bedrock is configured and its credentials work: Titan embeddings and Claude Haiku 4.5 both answered test
+calls. A full run is blocked by AWS, not the code: a new account needs the Anthropic use-case form and account
+verification before Claude can be used.
 
 ### Evaluation suite
 
@@ -204,6 +236,49 @@ appropriate team. The 5 edge cases are an empty message, gibberish, an unknown c
 a simulated LLM outage. All were handled without a crash. The routes and outcomes above were the same across repeated runs; the
 model's wording varies.
 
+### Evaluation
+
+The evaluation suite ran 36 labelled tickets, 3 times each (108 runs), with `gpt-4o-mini` running the agents
+and `gpt-4o` as the judge. **95 of 108 runs passed every check (88%)**, with a median of 4.4 seconds per message.
+
+| Check | Passed | Rate |
+|---|---|---|
+| Issue type | 33 / 33 | 100% |
+| Route | 102 / 108 | 94% |
+| Outcome | 102 / 108 | 94% |
+| Escalation team | 18 / 18 | 100% |
+| Tool calls | 39 / 42 | 93% |
+| Forbidden text | 3 / 3 | 100% |
+| Key points (judge) | 119 / 132 | 90% |
+| Faithfulness (judge) | 54 / 58 | 93% |
+
+| Category | Runs passed |
+|---|---|
+| Policy (refunds, blocked accounts, privacy, human requests, repeat problems) | 18 / 18 |
+| Safety (prompt injection, another customer's data, venue incident) | 9 / 9 |
+| Questions no article answers (escalated, not invented) | 9 / 9 |
+| Routing edge cases | 6 / 6 |
+| Portuguese and Spanish | 6 / 6 |
+| Account actions | 26 / 33 |
+| Knowledge questions | 21 / 27 |
+
+Every rule that is enforced in code held in every run. The failures are the model's judgments, in three places:
+
+- **Two how-to questions were treated as account requests** (0 of 3 each). A guest asking whether a reservation
+  can be transferred, or why a QR code won't scan, was asked for their email instead of being answered from the
+  article that covers it. The classifier marks them as needing account action, and the routing then needs an
+  identified customer.
+- **"How many experiences do I have left this month?" was never answered** (0 of 3). The account agent drafted
+  a number without calling `get_my_account`. The quality gate saw that the draft wasn't backed by a tool result
+  and escalated every time, so no customer got an unsupported answer, but none got the number either.
+- **Four replies stated details the judge couldn't find in the evidence**, all in booking replies, such as the
+  date of a booking the customer already had.
+
+The first run used `gpt-4o-mini` as its own judge and scored 69%. Its faithfulness check failed 24 of 55 replies,
+many of them correct: it flagged "your subscription has been paused" right after `change_subscription` had
+succeeded. With `gpt-4o` as the judge, faithfulness rose to 93%, while the checks done in code, which don't depend on the
+judge, stayed within one run of the first evaluation (section 6).
+
 ## 6. Challenges and solutions
 
 These came from running the system against the real model, not from the tests. A scripted fake LLM can't
@@ -240,6 +315,15 @@ Adding tracing and customer logins found these:
 | **A new database never reached existing installs.** Postgres runs its init script only when the volume is first created, so the new `auth` database would have existed only on fresh installs. | The script is now idempotent and a `db-setup` job runs it on every `up`. On an existing volume it created only `auth` and its role. |
 | **The tracing package was optional, so tracing could fail silently.** Keys set without the package installed would just trace nothing. | Tracing logs a warning in that case and stays off, which a test covers. A manual run with Langfuse unreachable confirmed that the reply isn't slowed down or broken: the export fails in the background. |
 
+Running the full stack and the evaluation with a real model for the first time, and adding pgvector, found these:
+
+| Problem found | Fix |
+|---|---|
+| **The default Bedrock model had been retired.** Every Converse call to Claude 3.5 Haiku failed with "This model version has reached the end of its life". | The default and the examples now use Claude Haiku 4.5, the newest model the account could call. Bedrock model ids need checking against the account's inference profiles, not just the documentation. |
+| **The judge graded its own model, and harshly.** With `gpt-4o-mini` judging `gpt-4o-mini`, 24 of 55 faithfulness checks failed, many on claims a successful tool call had just confirmed, so the headline was 69%. | The evaluation runs with `UDAHUB_EVAL_JUDGE_MODEL=gpt-4o`, which the suite already supported: 88%, with faithfulness at 93%. Each judge failure was checked against the tool results before trusting either number. |
+| **Resetting the demo data emptied the pgvector index under a running service.** `seed --reset` deletes and reloads the articles, the cascade deleted their embeddings, and every knowledge search came back empty, so every how-to question would have escalated. The in-memory index had never had this problem. | A search that finds no rows for an account with articles re-embeds them first: the query has no threshold, so no rows always means a missing index. A test reloads the articles under a live retriever. Found by resetting the data after the end-to-end run, not by the unit tests. |
+| **The demo data went out of date.** The committed experiences were dated 10–16 November, so by the day of a demo, reservations were in the past and few experiences could be booked. | `01_external_db_setup.ipynb` rebuilt the database with dates 12–18 November. The evaluation and tests are unaffected: they move the dates to today on every run. |
+
 ## 7. Lessons
 
 - **Move decisions with consequences out of the prompt.** Routing, escalation policy, id validation and memory
@@ -254,6 +338,10 @@ Adding tracing and customer logins found these:
 - **Identity has to come from something the caller proved.** Taking the customer from the message metadata was
   fine for trusted channels, but not for customers calling directly. Setting it from a verified token at the
   gateway fixed that without touching any agent.
+- **A judge needs to be stronger than the model it grades.** The same model judging itself failed correct
+  answers often enough to hide where the real problems were.
+- **A derived index has to notice when its source changes underneath it.** Moving the embeddings from memory
+  into the database made them shared and durable, but also exposed them to the data reset.
 - **Optional features must be off without configuration.** Tracing and the extra Compose profiles change nothing
   unless they are configured, so the notebooks, the tests and the default stack keep working.
 
@@ -267,10 +355,18 @@ Adding tracing and customer logins found these:
   like "outdoor activities" work directly.
 - **Memory filters are pattern-based.** They block every slip seen in testing, but a new kind could still get
   through. An evaluation set of conversations and expected memories would measure it.
-- **The evaluation suite hasn't been run against the real model yet.** The course API key was suspended before
-  it could be. It also doesn't yet check what is written to long-term memory.
-- **Bedrock, SageMaker and the full stack with a real model haven't been run.** Bedrock and the SageMaker
-  embeddings are covered by the offline tests only, and the Docker stack has only run with a placeholder key.
+- **Some how-to questions are routed as account requests.** Asking whether a reservation can be transferred, or
+  why a QR code won't scan, gets a request for the guest's email instead of the article's answer (0 of 3 runs
+  each). A routing rule for questions the knowledge base covers, or clearer classifier guidance, is the next fix.
+- **The account agent sometimes answers without looking the account up.** The quality gate catches it and
+  escalates, so the customer never gets an unsupported answer, but "how many experiences do I have left" is
+  never answered (0 of 3 runs). Requiring a lookup before an account answer would close it.
+- **The evaluation doesn't check long-term memory** yet: what gets written to `customer_memory`.
+- **Bedrock and SageMaker haven't completed a full run.** Bedrock credentials and model ids are verified (Titan
+  embeddings and Claude Haiku 4.5 answered test calls), but a new AWS account must be verified and approved for
+  Anthropic models first. SageMaker is covered by the offline tests only.
+- **The pgvector search is an exact scan.** That suits 18 articles; thousands would need an HNSW index, created
+  per embedding model because it needs a fixed vector dimension.
 - **The gateway's rate limits are per replica.** They are kept in memory; with several gateway replicas they
   would need Redis or Valkey.
 - **Logins are demo-grade in three ways.** Verification codes are written to the auth service's log instead of
@@ -285,8 +381,8 @@ Adding tracing and customer logins found these:
 |---|---|
 | [`solution/`](solution/README.md) | The project: notebooks, `agentic/` (agents, tools, design), data and tests |
 | [`solution/evals/README.md`](solution/evals/README.md) | The evaluation suite: running it, what is checked, and the case format |
-| [`service/README.md`](service/README.md) | The microservices: architecture, running with Docker Compose, customer logins (JWT), monitoring, LLM tracing (Langfuse), schema migrations, the API |
-| [`.github/workflows/tests.yml`](.github/workflows/tests.yml) | CI: both test suites, with a Postgres service, on every pull request |
+| [`service/README.md`](service/README.md) | The microservices: architecture, running with Docker Compose, the demo web chat, customer logins (JWT), embeddings in Postgres (pgvector), monitoring, LLM tracing (Langfuse), schema migrations, the API |
+| [`.github/workflows/tests.yml`](.github/workflows/tests.yml) | CI: both test suites, with a Postgres service that has pgvector, on every pull request |
 | [`solution/agentic/design/README.md`](solution/agentic/design/README.md) | Architecture, routing rules, memory, logging, safeguards, inputs and outputs |
 | [`solution/03_agentic_app.ipynb`](solution/03_agentic_app.ipynb) | The executed demonstration |
 | [`README.md`](README.md) | Setup, tests and the full demo results |

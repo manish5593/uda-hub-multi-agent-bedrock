@@ -9,12 +9,14 @@ The agents, prompts, routing rules and tools are the ones in `solution/agentic`,
 in `agentic/tools` runs either locally against a database, as in the notebooks, or over HTTP against the
 service that owns that data, depending on configuration (see [How the split works](#how-the-split-works)).
 
-**Status:** the services, the Postgres paths, the migrations and the HTTP flow between the services are covered
-by `service/tests`, which CI also runs against Postgres 16. The images build and the whole stack, monitoring
-included, has been run with `docker compose`: migrations, seed, health checks, the gateway, Prometheus and
-Grafana, Langfuse, which recorded a trace for each message sent through the gateway, and customer sign-up and
-login, with the token deciding who the customer is. That run used a
-placeholder model key, so messages got the fallback reply; a run with real model credentials is still to do.
+**Status:** the services, the Postgres paths, the migrations, the pgvector index and the HTTP flow between the
+services are covered by `service/tests`, which CI also runs against Postgres 16 with pgvector. The whole stack,
+monitoring and Langfuse included, has been run end to end with `docker compose` and the real model
+(`gpt-4o-mini`): the 13 notebook scenarios sent through the gateway behaved as in the notebook, with real
+cancellations and refund requests, escalations to the right teams, no errors, and replies in 1 to 13 seconds.
+Customer sign-up and login worked, with the token deciding who the customer is. Prometheus counted every turn,
+Langfuse traced every message, and the knowledge service searched its pgvector index. Amazon Bedrock is
+configured, but a full run waits on AWS approving the account for Anthropic models.
 
 ## Architecture
 
@@ -342,10 +344,13 @@ python -m pytest service/tests
 The tests run every service in the same process against copies of the SQLite databases, with the agent's
 calls going through real HTTP requests (FastAPI `TestClient`) and only the LLM scripted. They cover the
 service APIs, internal-token and API-key checks, rate limiting, the full gateway → agent → services flow,
-multi-turn conversations, escalation, memory, the agent metrics, and a service outage mid-turn.
+multi-turn conversations, escalation, memory, the agent metrics, a service outage mid-turn, and the demo web
+chat.
 
-The migration tests run on SQLite. To also run them on Postgres, as CI does, give them a role that can create
-databases (each test uses its own new database and drops it afterwards):
+The migration tests run on SQLite. To also run them on Postgres, and to run the pgvector tests
+(`tests/test_pgvector.py`), as CI does, give them a role that can create databases on a server with pgvector
+(each test uses its own new database and drops it afterwards). The `udahub-postgres:16-pgvector` image that
+`docker compose build` makes works, as does `pgvector/pgvector:pg16`:
 
 ```bash
 UDAHUB_TEST_POSTGRES_URL=postgresql+psycopg://postgres:<password>@localhost:5432/postgres python -m pytest service/tests
@@ -382,7 +387,7 @@ UDAHUB_TEST_POSTGRES_URL=postgresql+psycopg://postgres:<password>@localhost:5432
 ## Limitations
 
 - The demo experiences in the committed `cultpass.db` are dated 1 to 7 days after the day it was built
-  (10 to 16 November 2026). Once those dates pass, searches return nothing and bookings fail, in the services
+  (12 to 18 November 2026). Once those dates pass, searches return nothing and bookings fail, in the services
   as in the notebooks (the tests are unaffected: they move the dates to today). Rebuild the database with
   `01_external_db_setup.ipynb` before seeding.
 - The rate limit is kept in each gateway replica's memory. With several gateway replicas, move it to Redis

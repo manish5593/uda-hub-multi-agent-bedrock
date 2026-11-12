@@ -4,9 +4,10 @@
 > [uda-hub-multi-agent-support](https://github.com/manish5593/uda-hub-multi-agent-support). Set
 > `UDAHUB_LLM_PROVIDER=bedrock` to use Claude through the Bedrock Converse API, with Titan Text Embeddings V2 for
 > retrieval. Retrieval embeddings can instead come from an Amazon SageMaker endpoint
-> ([below](#sagemaker-embeddings)). **Status:** both are implemented and covered by the offline tests, but the system
-> has not yet been run against Bedrock or SageMaker. The demo results below are from the original OpenAI
-> (`gpt-4o-mini`) version.
+> ([below](#sagemaker-embeddings)). **Status:** both are implemented and covered by the offline tests. The Bedrock
+> credentials and model ids are verified (Claude Haiku 4.5 and Titan answered test calls), but a full run waits on
+> AWS approving the account for Anthropic models; SageMaker hasn't been run. The demo results, the end-to-end run of
+> the microservices and the evaluation below all use OpenAI (`gpt-4o-mini`).
 
 UDA-Hub is an intelligent, multi-agent decision suite that resolves customer support tickets for the
 platforms it serves. It is built with LangGraph. The first integrated account is **CultPass**, a
@@ -60,16 +61,17 @@ The same workflow, with the same nodes, prompts, tools and rules, runs in two wa
 - **In process**, from the notebooks or `process_ticket()`, against the committed SQLite databases (`solution/`).
 - **As microservices** behind an API gateway, run with Docker Compose ([`service/`](service/README.md)). The
   whole workflow runs inside the agent service; the tickets, cultpass and knowledge services only hold data, each
-  in its own Postgres database. Channel integrations call the gateway with an API key, and customers can sign
+  in its own Postgres database, and the knowledge service keeps the article embeddings there with pgvector. Channel integrations call the gateway with an API key, and customers can sign
   up and log in through the auth service: their JWT access token decides who they are, and they only see
   their own tickets. Prometheus and Grafana show traffic and support outcomes, and Langfuse
-  traces every model and tool call.
+  traces every model and tool call. A web chat at `/demo` is for trying it in a browser.
 
 ![UDA-Hub deployment as microservices](solution/agentic/design/deployment.svg)
 
 An evaluation suite ([`solution/evals/`](solution/evals/README.md)) runs 36 labelled tickets against the real model
-and reports routing, outcome, tool and answer accuracy. GitHub Actions runs the offline tests on every pull
-request.
+and reports routing, outcome, tool and answer accuracy: **95 of 108 runs pass every check (88%)**, and every
+policy, safety, language and knowledge-gap case passes in every run ([results](#evaluation-results)). GitHub
+Actions runs the offline tests on every pull request.
 
 ## Repository layout
 
@@ -78,7 +80,7 @@ request.
 | `solution/` | The complete, working project, with its own guide in [`solution/README.md`](solution/README.md) |
 | `service/` | The same system as microservices (gateway, agent, CultPass, tickets, knowledge, auth) with Postgres and Docker Compose, in [`service/README.md`](service/README.md) |
 | `requirements.txt` | Python dependencies |
-| `.github/workflows/tests.yml` | CI: runs the solution and service tests (with a Postgres 16 service) on pushes to `main` and on pull requests |
+| `.github/workflows/tests.yml` | CI: runs the solution and service tests (with a Postgres 16 service that has pgvector) on pushes to `main` and on pull requests |
 
 ```
 solution/
@@ -222,20 +224,21 @@ python -m pytest tests
 The tests need no API key. Each one runs against a temporary copy of the databases, so your data is not modified.
 
 The microservices have their own tests, run from the repository root with both requirements files installed.
-Their migration tests also run against Postgres when `UDAHUB_TEST_POSTGRES_URL` is set (see
+Their migration and pgvector tests also run against Postgres when `UDAHUB_TEST_POSTGRES_URL` is set (see
 [`service/README.md`](service/README.md#tests)):
 
 ```bash
 python -m pytest service/tests
 ```
 
-GitHub Actions runs both suites, with a Postgres 16 service, on every pull request and every push to `main`.
+GitHub Actions runs both suites, with a Postgres 16 service that has pgvector, on every pull request and every push to `main`.
 
 To measure the real model, run the evaluation suite (needs the model settings in `.env`): 36 labelled tickets,
 3 runs each, scored in code and by an LLM judge. See [`solution/evals/README.md`](solution/evals/README.md).
 
 ```bash
 python -m evals.run
+UDAHUB_EVAL_JUDGE_MODEL=gpt-4o python -m evals.run    # a stronger judge, as in the results below
 ```
 
 ### Break Down Tests
@@ -267,8 +270,10 @@ python -m evals.run
   it is on each run gets its own handler, a session per ticket, and never the customer's email
 - `service/tests/` covers the microservices in one process: the service APIs, internal-token and API-key checks,
   customer sign-up, login, lockout and tokens (forged, expired, tampered), customers reaching only their own
-  tickets, rate limiting, the full gateway → agent → services flow, the agent metrics, a service outage mid-turn, and the
-  Alembic migrations (that they match the models, downgrade cleanly, and adopt databases created before them)
+  tickets, rate limiting, the full gateway → agent → services flow, the agent metrics, a service outage mid-turn, the
+  Alembic migrations (that they match the models, downgrade cleanly, and adopt databases created before them), the
+  pgvector index (search, re-embedding only what changed, one set of vectors per model, rebuilding after the
+  articles are reloaded, falling back to memory) and the demo web chat
 
 ## Demo Results
 
@@ -301,6 +306,28 @@ The safeguards each did their job during the run:
 - **Memory hygiene:** memories are third-person summaries of what the customer wrote, never the assistant's replies. Reservation state, named experiences, one-off requests, contact details and duplicates are not stored.
 
 The model's wording varies from run to run, but the routes and outcomes above were the same across repeated runs.
+
+### Evaluation results
+
+The evaluation suite ran 36 labelled tickets, 3 times each, with `gpt-4o-mini` running the agents and `gpt-4o`
+as the judge. **95 of 108 runs passed every check (88%)**, with a median of 4.4 seconds per message.
+
+| Category | Runs passed | | Check | Rate |
+|---|---|---|---|---|
+| Policy | 18 / 18 | | Issue type | 100% |
+| Safety | 9 / 9 | | Escalation team | 100% |
+| Not covered by an article | 9 / 9 | | Route | 94% |
+| Routing edge cases | 6 / 6 | | Outcome | 94% |
+| Portuguese and Spanish | 6 / 6 | | Tool calls | 93% |
+| Account actions | 26 / 33 | | Faithfulness (judge) | 93% |
+| Knowledge questions | 21 / 27 | | Key points (judge) | 90% |
+
+The rules enforced in code held in every run. What fails is the model's judgment in two places: a guest asking
+whether a reservation can be transferred, or why a QR code won't scan, is asked for their email instead of
+being answered from the article; and the account agent answers "how many experiences do I have left" without
+looking the account up, which the quality gate catches and escalates. With `gpt-4o-mini` judging its own
+replies, the same suite scored 69%, mostly from faithfulness failures on correct answers. The details are in
+[`report.md`](report.md#evaluation).
 
 ## Project Instructions
 

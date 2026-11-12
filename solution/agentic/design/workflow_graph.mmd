@@ -39,7 +39,7 @@ flowchart TD
     supervisor -.-> request_info
     knowledge_agent --> quality_gate
     account_agent --> quality_gate
-    quality_gate -.->|"<span style='color:rgb(26,32,44)'>yes: confidence ≥ 0.7,<br/>grounded, policy OK</span>"| approve
+    quality_gate -.->|"<span style='color:rgb(26,32,44)'>yes: confidence ≥ 0.7, grounded,<br/>answers it, policy OK</span>"| approve
     quality_gate -.->|"<span style='color:rgb(26,32,44)'>no → escalate</span>"| escalation_agent
     approve --> finalize
     escalation_agent --> finalize

@@ -138,6 +138,13 @@ python -m evals.run            # needs the model settings in .env; 3 runs per ca
 
 See [`evals/README.md`](evals/README.md) for the checks, the case format, and the options.
 
+**Results:** with `gpt-4o-mini` running the agents and `gpt-4o` judging (`UDAHUB_EVAL_JUDGE_MODEL=gpt-4o`),
+**95 of 108 runs passed every check (88%)**. Every policy, safety, language, routing and knowledge-gap case passed
+in every run. The failures are two how-to questions from a guest that get a request for their email instead of
+the article's answer, and the account agent answering a quota question without looking the account up, which
+the quality gate escalates. With `gpt-4o-mini` as its own judge the score was 69%, mostly from faithfulness
+failures on correct answers. The full results are in [`../report.md`](../report.md#evaluation).
+
 ## Folder guide
 
 | Path | Contents |
@@ -169,7 +176,7 @@ The project overview for the whole repository is in the [root README](../README.
 | Multi-agent architecture with LangGraph | `agentic/workflow.py`, `agentic/agents/` |
 | Input handling (text and metadata) | `process_ticket()` in `agentic/workflow.py`, `load_context` in `agentic/agents/memory_agent.py` |
 | Classification and routing | `agentic/agents/classifier.py`, `agentic/agents/supervisor.py`. Notebook 03's "Routing decisions for sample tickets" cell shows every rule on 10 sample tickets. |
-| RAG over the knowledge base | `agentic/tools/knowledge_tools.py`, `agentic/agents/knowledge_agent.py`. Notebook 03 shows retrieval for six ticket types, and scenarios 9–11 show answering and both kinds of knowledge-gap escalation. |
+| RAG over the knowledge base | `agentic/tools/knowledge_tools.py` (an in-memory index here; pgvector in the [knowledge service](../service/README.md#embeddings-in-postgres-pgvector)), `agentic/agents/knowledge_agent.py`. Notebook 03 shows retrieval for six ticket types, and scenarios 9–11 show answering and both kinds of knowledge-gap escalation. |
 | Tools, including the internal refund tool | `agentic/tools/cultpass_tools.py`. Notebook 03's "Support tools on sample operations" cell calls each tool, including its validation and error cases. |
 | Resolve or escalate | `agentic/agents/quality_gate.py`, `agentic/agents/escalation_agent.py` |
 | Memory: state, short-term and long-term | `agentic/state.py`, `agentic/agents/memory_agent.py`, `agentic/tools/ticket_tools.py`, `CustomerMemory` in `data/models/udahub.py`. Notebook 03's "Persistent memory" cells show a returning customer's stored history, a fresh session (empty checkpointer) picking up a ticket from `udahub.db`, inspecting a ticket by `thread_id` (messages, tool usage, trace, node order), and a preference learned in one session and used in another (scenarios 12 and 13). |
