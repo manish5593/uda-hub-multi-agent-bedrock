@@ -167,7 +167,7 @@ def scripted(monkeypatch):
     llm = FakeLLM({
         TicketClassification: classification(issue_type="login_access"),
         ResolutionAssessment: ResolutionAssessment(confidence=0.9, grounded=True, answered_by_evidence=True,
-                                                   needs_human=False, awaiting_customer=False, reason="ok"),
+                                                   awaiting_customer=False, reason="ok"),
         EscalationHandoff: EscalationHandoff(team="trust_and_safety", priority="high", summary="blocked",
                                              steps_taken=[], recommended_next_step="review",
                                              customer_message="A specialist will review your case."),

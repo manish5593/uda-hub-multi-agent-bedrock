@@ -29,7 +29,7 @@ def classification(**kw):
 
 
 GOOD_ASSESSMENT = ResolutionAssessment(confidence=0.9, grounded=True, answered_by_evidence=True,
-                                       needs_human=False, awaiting_customer=False, reason="grounded answer")
+                                       awaiting_customer=False, reason="grounded answer")
 HANDOFF = EscalationHandoff(team="general_support", priority="medium", summary="needs a human",
                             steps_taken=["checked KB"], recommended_next_step="call customer",
                             customer_message="A specialist will follow up by email.")
@@ -88,7 +88,7 @@ def test_knowledge_question_is_resolved_with_rag(run):
 
 
 def test_low_confidence_resolution_is_escalated(run):
-    low = ResolutionAssessment(confidence=0.4, grounded=True, answered_by_evidence=True, needs_human=False,
+    low = ResolutionAssessment(confidence=0.4, grounded=True, answered_by_evidence=True,
                                awaiting_customer=False, reason="unsure")
     graph = run(classification=classification(issue_type="login_access"), assessment=low)
     state = process_ticket("I forgot my password", "t-low", agent=graph)
@@ -281,7 +281,7 @@ def test_no_relevant_article_is_escalated(run):
 
 
 def test_related_but_unhelpful_articles_are_escalated(run):
-    off_topic = ResolutionAssessment(confidence=0.9, grounded=True, answered_by_evidence=False, needs_human=False,
+    off_topic = ResolutionAssessment(confidence=0.9, grounded=True, answered_by_evidence=False,
                                      awaiting_customer=False, reason="articles are about QR codes, not parking")
     graph = run(classification=classification(issue_type="general_info", summary="parking at venues"),
                 assessment=off_topic)

@@ -19,11 +19,13 @@ Judge the draft against the evidence (the customer's account, knowledge base art
 - answered_by_evidence: true only if the evidence actually answers what the customer asked. Articles that are
   on a related topic but don't answer the question (e.g. an article about QR codes for a question about
   parking) mean false. A draft that can't answer and offers to pass the question on also means false.
-- needs_human: true if policy requires a human (refund approval, blocked account, identity verification,
-  legal/data-protection issues), if the draft says it cannot help, or if the issue is persistent
-  after the documented steps were already tried (see conversation / previous tickets).
-  A draft that gives the documented steps and says the team can help *if they don't work* does NOT need a
-  human yet: the customer should try the steps first.
+- policy_requires_human: true only for refund approval, a blocked account, a legal or data-protection issue,
+  or identity verification.
+- customer_says_steps_failed: true only if the customer says they already tried the documented steps and they
+  didn't work. A draft that gives the steps and offers more help *if they don't work* is false: the customer
+  hasn't tried them yet.
+- A claim about anyone other than this customer (another person's reservations or account) is NOT grounded:
+  the tools only show this customer's account.
 - awaiting_customer: true if the draft asks a clarifying question that is genuinely needed to proceed.
   A good clarifying question is a valid outcome and deserves high confidence. A draft that answers the
   request and then offers more help ("feel free to ask", "if you'd like, I can...") is NOT awaiting the
@@ -78,6 +80,8 @@ def assess_resolution(state: dict) -> dict:
                              f"{chr(10).join(evidence) or 'No evidence.'}\n\nDraft reply:\n{draft}"),
     ])
     assessment = result.model_dump()
+    # Code decides whether a human is needed, from the two facts the gate reports
+    assessment["needs_human"] = assessment["policy_requires_human"] or assessment["customer_says_steps_failed"]
     if assessment["awaiting_customer"] and not asks_a_question(draft):
         # The model marks "let me know if..." offers as waiting for the customer, which left answered tickets
         # open. A reply can only wait for an answer if it asks something, so code decides.

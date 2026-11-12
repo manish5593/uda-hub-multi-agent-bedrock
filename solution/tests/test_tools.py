@@ -1,3 +1,4 @@
+import pytest
 """Tests for the deterministic building blocks: tools, routing, retrieval and escalation rules."""
 from agentic.agents.quality_gate import should_escalate
 from agentic.agents.supervisor import route_ticket
@@ -132,7 +133,7 @@ def test_a_reply_without_a_question_is_not_awaiting_the_customer(monkeypatch):
     assert quality_gate.asks_a_question("¿Cuál es tu correo")
     assert not quality_gate.asks_a_question("You have 1 left this month. Let me know if you need anything!")
 
-    verdict = ResolutionAssessment(confidence=0.9, grounded=True, answered_by_evidence=True, needs_human=False,
+    verdict = ResolutionAssessment(confidence=0.9, grounded=True, answered_by_evidence=True,
                                    awaiting_customer=True, reason="offers more help")
 
     class Gate:
@@ -148,6 +149,43 @@ def test_a_reply_without_a_question_is_not_awaiting_the_customer(monkeypatch):
     assert answered["assessment"]["awaiting_customer"] is False
     asking = quality_gate.assess_resolution({**state, "draft_response": "Which of your two reservations?"})
     assert asking["assessment"]["awaiting_customer"] is True
+
+
+@pytest.mark.parametrize("policy, steps_failed, escalates", [
+    (False, False, False),  # troubleshooting steps offered: the customer tries them first
+    (True, False, True),    # refund approval, blocked account, legal...
+    (False, True, True),    # the customer already tried the documented steps
+])
+def test_code_decides_whether_a_human_is_needed(monkeypatch, policy, steps_failed, escalates):
+    """The gate model reports two facts; code combines them into needs_human. Asked directly, the model
+    escalated troubleshooting answers that offer help if the steps don't work."""
+    from agentic.agents import quality_gate
+    from agentic.state import ResolutionAssessment
+    verdict = ResolutionAssessment(confidence=0.9, grounded=True, answered_by_evidence=True,
+                                   policy_requires_human=policy, customer_says_steps_failed=steps_failed,
+                                   awaiting_customer=False, reason="checked")
+
+    class Gate:
+        def with_structured_output(self, schema):
+            return self
+
+        def invoke(self, messages):
+            return verdict
+
+    monkeypatch.setattr(quality_gate, "get_llm", lambda: Gate())
+    state = {"messages": [], "trace": [], "ticket_id": "t-human",
+             "draft_response": "Update the app, then restart it. If it keeps crashing, we can take a closer look."}
+    assessment = quality_gate.assess_resolution(state)["assessment"]
+    assert assessment["needs_human"] is escalates
+    assert should_escalate({"assessment": assessment})[0] is escalates
+
+
+def test_reservations_say_whose_they_are():
+    """The agent once told Cathy that her own reservation was her friend Bob's."""
+    cathy = {t.name: t for t in cp.build_account_tools("88382b", "t-owner")}
+    reservations = cathy["get_my_reservations"].invoke({})
+    assert reservations and all(r["booked_by"] == "Cathy Bloom (the customer you are talking to)"
+                                for r in reservations)
 
 
 def test_escalation_rules():

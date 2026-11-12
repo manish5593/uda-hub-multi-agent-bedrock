@@ -58,11 +58,18 @@ class ResolutionAssessment(BaseModel):
         description="True only if the knowledge base articles or tool results actually answer the customer's "
         "question. False if they are merely related, or the draft has to send the customer elsewhere."
     )
-    needs_human: bool = Field(
-        description="True only if a human must take over NOW: policy requires one (refund approval, blocked "
-        "account, legal, identity verification), the draft cannot resolve the issue, or documented steps "
-        "already failed. False when the draft gives the steps to try and only offers escalation if they "
-        "don't work."
+    # needs_human is not asked of the model: asked as one judgment, it read "let us know if it persists" as a
+    # human being needed now. The gate asks these two facts and code combines them (quality_gate.py).
+    policy_requires_human: bool = Field(
+        default=False,
+        description="True only if policy requires a human for this request: refund approval, a blocked account, "
+        "a legal or data-protection issue, or identity verification. Troubleshooting, how-to and account "
+        "questions are False, even when the draft offers more help if the steps don't work."
+    )
+    customer_says_steps_failed: bool = Field(
+        default=False,
+        description="True only if the customer says they already tried the documented steps (or the steps in "
+        "the draft) and they didn't work. False when the customer hasn't tried them yet."
     )
     awaiting_customer: bool = Field(
         description="True if the draft asks the customer a question they must answer before the request can "

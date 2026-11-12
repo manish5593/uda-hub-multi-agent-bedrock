@@ -25,7 +25,7 @@ def classification(**kw):
     return TicketClassification(**{**base, **kw})
 
 
-GOOD = ResolutionAssessment(confidence=0.9, grounded=True, answered_by_evidence=True, needs_human=False,
+GOOD = ResolutionAssessment(confidence=0.9, grounded=True, answered_by_evidence=True,
                             awaiting_customer=False, reason="grounded")
 HANDOFF = EscalationHandoff(team="trust_and_safety", priority="high", summary="blocked account",
                             steps_taken=[], recommended_next_step="review", customer_message="A specialist will email you.")
@@ -111,7 +111,7 @@ def test_conversation_continues_across_turns_and_identifies_the_customer(agent_c
         return _Agent()
     monkeypatch.setattr(account_agent, "create_agent", fake_agent)
     llm.outputs[ResolutionAssessment] = ResolutionAssessment(
-        confidence=0.9, grounded=True, answered_by_evidence=False, needs_human=False, awaiting_customer=True,
+        confidence=0.9, grounded=True, answered_by_evidence=False, awaiting_customer=True,
         reason="clarifying question")
     second = agent_client.post("/tickets/t-guest/messages", json={"text": "It's bob.stone@granite.com"}).json()
 

@@ -280,9 +280,12 @@ def build_account_tools(user_id: str, ticket_id: str) -> list[StructuredTool]:
         return get_customer_profile(user_id) or {"error": "Customer not found."}
 
     def get_my_reservations() -> list[dict]:
-        """List the customer's reservations (id, status, experience, date)."""
+        """List the reservations of the customer you are talking to (id, status, experience, date). These are never another person's reservations: no tool can see other customers' accounts."""
         reservations = list_reservations(user_id)
+        profile = get_customer_profile(user_id)
+        owner = f"{profile['name'] if profile else 'this customer'} (the customer you are talking to)"
         for r in reservations:
+            r["booked_by"] = owner
             seen_reservation_ids[r["reservation_id"]] = f"{r['experience']}, {r['when']}, {r['status']}"
             seen_experience_ids[r["experience_id"]] = r["experience"]
         return reservations
