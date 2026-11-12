@@ -203,6 +203,16 @@ def test_gateway_requires_an_api_key(gateway):
     assert gateway.get("/v1/tickets/t-1").status_code == 401
 
 
+def test_demo_page_is_served_without_secrets(gateway):
+    gateway.headers.pop("X-API-Key")
+    page = gateway.get("/demo")
+    assert page.status_code == 200 and page.headers["content-type"].startswith("text/html")
+    assert "/v1/tickets/" in page.text
+    # The page never embeds a key: the person using it types one in
+    for key in [API_KEY, "other-key"]:
+        assert key not in page.text
+
+
 def test_gateway_rate_limits_each_key(gateway):
     statuses = [gateway.get("/v1/tickets/missing").status_code for _ in range(6)]
     assert statuses == [404] * 5 + [429]

@@ -153,6 +153,12 @@ curl -s localhost:8080/v1/tickets/T-100/messages -H 'X-API-Key: change-me-web-ch
 `status` is `resolved`, `awaiting_customer`, `escalated`, or `error` (the fallback reply was sent and the
 ticket was flagged for a human). The interactive API docs are at <http://localhost:8080/docs>.
 
+For demos, the gateway also serves a web chat at <http://localhost:8080/demo> (`gateway/demo.html`). Pick a
+demo customer or a guest, type or click a suggested message, and each reply shows its status and the team it
+was escalated to. The page holds no secret: enter a channel API key in the sidebar (or open
+`/demo?key=<key>` once), and it stays in that browser. Every message goes through the same authenticated
+endpoint as any other client.
+
 ### Customer logins (JWT)
 
 Besides channel integrations with an API key, customers can log in and call the API themselves. Only CultPass

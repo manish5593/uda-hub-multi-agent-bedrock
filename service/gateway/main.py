@@ -19,6 +19,7 @@ It also:
 """
 import hmac
 import os
+import pathlib
 import threading
 import time
 import uuid
@@ -31,7 +32,7 @@ from typing import Literal, Optional
 import httpx
 import jwt
 from fastapi import Depends, Header, HTTPException, Path, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 
@@ -286,6 +287,16 @@ async def register_complete(body: RegisterIn):
 async def login(body: LoginIn):
     """Exchange email and password for an access token. Send it as `Authorization: Bearer <token>`."""
     return await forward_auth("/login", body)
+
+
+DEMO_PAGE = pathlib.Path(__file__).with_name("demo.html")
+
+
+@app.get("/demo", include_in_schema=False)
+async def demo_page():
+    """A web chat for demos. It holds no secret: the person using it enters a channel API key, which stays
+    in their browser, and every message goes through the same authenticated endpoint as any client."""
+    return FileResponse(DEMO_PAGE, media_type="text/html")
 
 
 @app.get("/ready", include_in_schema=False)

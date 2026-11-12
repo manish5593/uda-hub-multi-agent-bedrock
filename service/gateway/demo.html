@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>UDA-Hub Support Chat</title>
+<style>
+  :root {
+    --bg: #f4f5f7; --panel: #ffffff; --ink: #1d2433; --muted: #667085; --line: #e4e7ec;
+    --accent: #5b4bdb; --accent-ink: #ffffff; --user: #5b4bdb; --user-ink: #ffffff; --agent: #f2f4f7;
+    --ok: #12805c; --ok-bg: #e7f6ef; --wait: #a15c07; --wait-bg: #fdf3e2;
+    --esc: #b42318; --esc-bg: #fdecea; --err: #475467; --err-bg: #eef0f3; --chip: #eeecfb;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1117; --panel: #171a22; --ink: #e6e8ee; --muted: #98a2b3; --line: #2a2f3a;
+      --accent: #8b7dff; --accent-ink: #0f1117; --user: #6d5df0; --user-ink: #ffffff; --agent: #222632;
+      --ok: #4fd1a1; --ok-bg: #133328; --wait: #f5b452; --wait-bg: #3a2c12;
+      --esc: #ff8a80; --esc-bg: #3d1a18; --err: #b0b8c6; --err-bg: #262a33; --chip: #262347;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { background: var(--bg); color: var(--ink); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .app { display: grid; grid-template-columns: 280px 1fr; height: 100vh; max-width: 1200px; margin: 0 auto; }
+  aside { border-right: 1px solid var(--line); padding: 20px 16px; overflow-y: auto; background: var(--panel); }
+  main { display: flex; flex-direction: column; min-width: 0; height: 100vh; background: var(--panel); }
+  h1 { font-size: 17px; margin: 0 0 2px; }
+  .sub { color: var(--muted); font-size: 13px; margin-bottom: 18px; }
+  .label { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 16px 0 8px; }
+  .customers { display: flex; flex-direction: column; gap: 4px; }
+  .cust { display: flex; justify-content: space-between; align-items: center; gap: 8px; width: 100%; text-align: left;
+          padding: 8px 10px; border: 1px solid transparent; border-radius: 8px; background: none; color: var(--ink);
+          font: inherit; cursor: pointer; }
+  .cust:hover { background: var(--agent); }
+  .cust.active { border-color: var(--accent); background: var(--chip); }
+  .cust small { color: var(--muted); font-size: 12px; }
+  .tag { font-size: 11px; padding: 1px 6px; border-radius: 99px; background: var(--esc-bg); color: var(--esc); white-space: nowrap; }
+  .btn { padding: 8px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+         font: inherit; cursor: pointer; }
+  .btn:hover { border-color: var(--accent); }
+  .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+  .btn:disabled { opacity: .5; cursor: default; }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 20px;
+           border-bottom: 1px solid var(--line); }
+  .who { font-weight: 600; }
+  .meta { color: var(--muted); font-size: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .health { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  .dot.up { background: var(--ok); } .dot.down { background: var(--esc); }
+  #log { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 14px; }
+  .empty { margin: auto; text-align: center; color: var(--muted); max-width: 420px; }
+  .msg { max-width: 75%; display: flex; flex-direction: column; gap: 4px; }
+  .msg.user { align-self: flex-end; align-items: flex-end; }
+  .bubble { padding: 10px 14px; border-radius: 14px; overflow-wrap: anywhere; }
+  .user .bubble { background: var(--user); color: var(--user-ink); border-bottom-right-radius: 4px; }
+  .agent .bubble { background: var(--agent); border-bottom-left-radius: 4px; }
+  .bubble ul { margin: 4px 0; padding-left: 20px; }
+  .badges { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; font-size: 12px; }
+  .badge { padding: 2px 8px; border-radius: 99px; font-weight: 600; }
+  .s-resolved { background: var(--ok-bg); color: var(--ok); }
+  .s-awaiting_customer { background: var(--wait-bg); color: var(--wait); }
+  .s-escalated { background: var(--esc-bg); color: var(--esc); }
+  .s-error, .s-failed { background: var(--err-bg); color: var(--err); }
+  .time { color: var(--muted); }
+  .typing .bubble { display: inline-flex; gap: 4px; align-items: center; color: var(--muted); }
+  .typing span.d { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); animation: blink 1.2s infinite; }
+  .typing span.d:nth-child(2) { animation-delay: .2s; } .typing span.d:nth-child(3) { animation-delay: .4s; }
+  @keyframes blink { 0%, 80%, 100% { opacity: .25; } 40% { opacity: 1; } }
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; padding: 0 20px 10px; }
+  .chip { padding: 6px 12px; border-radius: 99px; border: 1px solid var(--line); background: var(--chip); color: var(--ink);
+          font: inherit; font-size: 13px; cursor: pointer; }
+  .chip:hover { border-color: var(--accent); }
+  form { display: flex; gap: 10px; padding: 12px 20px 18px; border-top: 1px solid var(--line); }
+  #text { flex: 1; min-width: 0; padding: 11px 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg);
+          color: var(--ink); font: inherit; }
+  #text:focus, #key:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  #key { width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); font: inherit; }
+  .hint { font-size: 12px; color: var(--muted); margin-top: 6px; }
+  .banner { margin: 12px 20px 0; padding: 10px 14px; border-radius: 10px; background: var(--esc-bg); color: var(--esc); font-size: 14px; display: none; }
+  @media (max-width: 760px) {
+    .app { grid-template-columns: 1fr; grid-template-rows: auto 1fr; height: auto; }
+    aside { border-right: none; border-bottom: 1px solid var(--line); padding: 14px 16px; }
+    .customers { flex-direction: row; flex-wrap: wrap; }
+    .cust { width: auto; }
+    main { height: 80vh; }
+    .msg { max-width: 90%; }
+    header, form, #log { padding-left: 16px; padding-right: 16px; }
+    .chips { padding: 0 16px 10px; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside>
+    <h1>UDA-Hub</h1>
+    <div class="sub">Multi-agent support for CultPass</div>
+
+    <div class="label">Talk as</div>
+    <div class="customers" id="customers"></div>
+
+    <div class="label">Conversation</div>
+    <button class="btn" id="new" type="button">New conversation</button>
+
+    <div class="label">Channel API key</div>
+    <input id="key" type="password" autocomplete="off" placeholder="X-API-Key">
+    <div class="hint">Kept in this browser only.</div>
+  </aside>
+
+  <main>
+    <header>
+      <div>
+        <div class="who" id="who"></div>
+        <div class="meta" id="ticket"></div>
+      </div>
+      <span class="health"><span class="dot" id="dot"></span><span id="health">checking…</span></span>
+    </header>
+    <div class="banner" id="banner"></div>
+    <div id="log"></div>
+    <div class="chips" id="chips"></div>
+    <form id="form">
+      <input id="text" autocomplete="off" placeholder="Type a message…" maxlength="4000">
+      <button class="btn primary" id="send" type="submit">Send</button>
+    </form>
+  </main>
+</div>
+
+<script>
+// Demo customers from solution/data/external (cultpass.db). Guest sends no identity.
+const CUSTOMERS = [
+  { id: "guest", name: "Guest", note: "not identified", email: null,
+    tries: ["What's included in a CultPass subscription?", "Do you offer a student discount?",
+            "I'd like to cancel my reservation", "The app keeps crashing on my phone"] },
+  { id: "cathy", name: "Cathy Bloom", note: "basic plan", email: "cathy.bloom@florals.org",
+    tries: ["Which reservations do I have coming up?", "Please cancel that one, I can't make it.",
+            "I want to talk to a real person now."] },
+  { id: "bob", name: "Bob Stone", note: "premium plan", email: "bob.stone@granite.com",
+    tries: ["I'd like to book the Samba Night at Lapa.", "Can you recommend an experience for me this week?",
+            "I still can't log in, the password reset email never arrives."] },
+  { id: "frank", name: "Frank Ocean", note: "premium plan", email: "frank.ocean@seawaves.io",
+    tries: ["I was charged twice for my subscription this month. I want my money back.",
+            "I love outdoor activities. Which experiences can I book this month?"] },
+  { id: "eva", name: "Eva Green", note: "cancelled plan", email: "eva.green@ecosoul.net",
+    tries: ["How do I restart my subscription?", "What reservations do I have?"] },
+  { id: "alice", name: "Alice Kingsley", note: "account blocked", email: "alice.kingsley@wonderland.com", blocked: true,
+    tries: ["I can't log into my account, it keeps failing!"] },
+];
+const STATUS_TEXT = { resolved: "Resolved", awaiting_customer: "Waiting for customer", escalated: "Escalated", error: "Error, flagged for a human" };
+
+const $ = (id) => document.getElementById(id);
+const store = {
+  get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch {} },
+};
+
+// Allow /demo?key=... once, then remove it from the address bar
+const params = new URLSearchParams(location.search);
+if (params.get("key")) { store.set("udahub.key", params.get("key")); history.replaceState(null, "", location.pathname); }
+$("key").value = store.get("udahub.key") || "";
+$("key").addEventListener("change", () => store.set("udahub.key", $("key").value.trim()));
+
+let current = CUSTOMERS[0];
+let ticketId = null;
+let busy = false;
+
+function newTicketId() {
+  const rand = Math.random().toString(36).slice(2, 8);
+  return `web-${new Date().toISOString().slice(5, 10).replace("-", "")}-${rand}`;
+}
+
+function renderCustomers() {
+  $("customers").innerHTML = "";
+  for (const c of CUSTOMERS) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "cust" + (c === current ? " active" : "");
+    const left = document.createElement("span");
+    left.innerHTML = `<div></div><small></small>`;
+    left.firstChild.textContent = c.name;
+    left.lastChild.textContent = c.email || c.note;
+    b.append(left);
+    if (c.blocked) { const t = document.createElement("span"); t.className = "tag"; t.textContent = "blocked"; b.append(t); }
+    b.addEventListener("click", () => { if (!busy) { current = c; startConversation(); } });
+    $("customers").append(b);
+  }
+}
+
+function startConversation() {
+  ticketId = newTicketId();
+  renderCustomers();
+  $("who").textContent = current.email ? `${current.name} · ${current.note}` : "Guest (not identified)";
+  $("ticket").textContent = `ticket ${ticketId}`;
+  $("log").innerHTML = "";
+  const empty = document.createElement("div");
+  empty.className = "empty";
+  empty.textContent = current.email
+    ? `Chatting as ${current.name}. The agents can look up their account, bookings and subscription.`
+    : "Chatting as a guest. Ask a general question, or ask for an account action and the agent will ask who you are.";
+  $("log").append(empty);
+  renderChips();
+  hideBanner();
+  $("text").focus();
+}
+
+function renderChips() {
+  $("chips").innerHTML = "";
+  for (const t of current.tries) {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "chip"; b.textContent = t;
+    b.addEventListener("click", () => { if (!busy) send(t); });
+    $("chips").append(b);
+  }
+}
+
+// Escape first, then a little markdown: **bold**, "- " bullets, line breaks
+function formatReply(text) {
+  const esc = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const lines = esc.split("\n");
+  let html = "", inList = false;
+  for (const line of lines) {
+    const m = line.match(/^\s*[-*•]\s+(.*)$/);
+    if (m) { if (!inList) { html += "<ul>"; inList = true; } html += `<li>${m[1]}</li>`; continue; }
+    if (inList) { html += "</ul>"; inList = false; }
+    html += line + "<br>";
+  }
+  if (inList) html += "</ul>";
+  return html.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>").replace(/(<br>)+$/, "");
+}
+
+function addMessage(role, text, extra) {
+  const empty = $("log").querySelector(".empty");
+  if (empty) empty.remove();
+  const wrap = document.createElement("div");
+  wrap.className = `msg ${role}`;
+  const bubble = document.createElement("div");
+  bubble.className = "bubble";
+  if (role === "agent") bubble.innerHTML = formatReply(text); else bubble.textContent = text;
+  wrap.append(bubble);
+  if (extra) {
+    const badges = document.createElement("div");
+    badges.className = "badges";
+    const s = document.createElement("span");
+    s.className = `badge s-${extra.status}`;
+    s.textContent = (STATUS_TEXT[extra.status] || extra.status) + (extra.escalated_to ? ` → ${extra.escalated_to.replace(/_/g, " ")}` : "");
+    badges.append(s);
+    const t = document.createElement("span");
+    t.className = "time"; t.textContent = `${(extra.ms / 1000).toFixed(1)} s`;
+    badges.append(t);
+    wrap.append(badges);
+  }
+  $("log").append(wrap);
+  $("log").scrollTop = $("log").scrollHeight;
+  return wrap;
+}
+
+function showTyping() {
+  const w = document.createElement("div");
+  w.className = "msg agent typing";
+  w.innerHTML = `<div class="bubble"><span class="d"></span><span class="d"></span><span class="d"></span>&nbsp;agents working</div>`;
+  $("log").append(w);
+  $("log").scrollTop = $("log").scrollHeight;
+  return w;
+}
+
+function showBanner(text) { $("banner").textContent = text; $("banner").style.display = "block"; }
+function hideBanner() { $("banner").style.display = "none"; }
+
+function setBusy(b) {
+  busy = b;
+  $("send").disabled = b; $("text").disabled = b; $("new").disabled = b;
+  for (const el of document.querySelectorAll(".chip")) el.disabled = b;
+}
+
+async function send(text) {
+  text = text.trim();
+  if (!text || busy) return;
+  const key = $("key").value.trim();
+  if (!key) { showBanner("Enter the channel API key in the sidebar first."); $("key").focus(); return; }
+  store.set("udahub.key", key);
+  hideBanner();
+  $("text").value = "";
+  addMessage("user", text);
+  const typing = showTyping();
+  setBusy(true);
+  const started = performance.now();
+  const metadata = { channel: "web" };
+  if (current.email) metadata.email = current.email;
+  try {
+    const r = await fetch(`/v1/tickets/${encodeURIComponent(ticketId)}/messages`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-API-Key": key },
+      body: JSON.stringify({ text, metadata }),
+    });
+    typing.remove();
+    if (r.status === 401) { showBanner("The API key was rejected. Check it in the sidebar."); return; }
+    if (r.status === 429) { showBanner("Rate limit reached. Wait a minute and try again."); return; }
+    if (!r.ok) { showBanner(`The gateway answered ${r.status}. Check the service logs.`); return; }
+    const data = await r.json();
+    addMessage("agent", data.reply, { status: data.status, escalated_to: data.escalated_to, ms: performance.now() - started });
+  } catch (e) {
+    typing.remove();
+    showBanner("Could not reach the gateway. Is the stack running?");
+  } finally {
+    setBusy(false);
+    $("text").focus();
+  }
+}
+
+async function checkHealth() {
+  try {
+    const r = await fetch("/ready");
+    const ok = r.ok;
+    $("dot").className = "dot " + (ok ? "up" : "down");
+    $("health").textContent = ok ? "all services up" : "some services down";
+  } catch {
+    $("dot").className = "dot down"; $("health").textContent = "gateway unreachable";
+  }
+}
+
+$("form").addEventListener("submit", (e) => { e.preventDefault(); send($("text").value); });
+$("new").addEventListener("click", () => { if (!busy) startConversation(); });
+startConversation();
+checkHealth();
+setInterval(checkHealth, 15000);
+</script>
+</body>
+</html>
