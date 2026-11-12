@@ -66,7 +66,8 @@ The same workflow, with the same nodes, prompts, tools and rules, runs in two wa
   up and log in through the auth service: their JWT access token decides who they are, and they only see
   their own tickets. Prometheus and Grafana show traffic and support outcomes, and Langfuse
   traces every model and tool call. A web chat at `/demo` is for trying it in a browser, as a logged-in customer
-  or through a channel. One-time codes are emailed with Amazon SES, or logged for demos.
+  or through a channel. One-time codes are emailed with Amazon SES from the project's own domain (DKIM-signed),
+  or logged for demos.
 
 ![UDA-Hub deployment as microservices](design/deployment.svg)
 
@@ -187,7 +188,7 @@ password, and log in in two steps, the password and then a code emailed to them,
 
 ```bash
 curl -s localhost:8080/v1/auth/register/start -H 'Content-Type: application/json' -d '{"email": "cathy.bloom@florals.org"}'
-docker compose logs auth | grep 'Verification code'     # logged, unless emailed with SES (UDAHUB_EMAIL_PROVIDER=ses)
+docker compose logs auth | grep 'Verification code'     # logged, unless emailed (UDAHUB_EMAIL_PROVIDER=ses or smtp)
 curl -s localhost:8080/v1/auth/register/complete -H 'Content-Type: application/json' \
   -d '{"email": "cathy.bloom@florals.org", "code": "123456", "password": "Florals-2026-ok"}'
 curl -s localhost:8080/v1/auth/login -H 'Content-Type: application/json' \

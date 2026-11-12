@@ -210,10 +210,9 @@ How it works:
 - **Customers only see their own tickets.** Another customer's ticket, or a guest ticket a channel started,
   answers `404` exactly like a missing one, so ticket ids can't be probed. Channels with an API key still see
   every ticket.
-- **Codes are emailed with Amazon SES** when `UDAHUB_EMAIL_PROVIDER=ses`, from the verified `UDAHUB_EMAIL_FROM`,
-  and are then never logged (`agentic/mailer.py`). By default they are written to the auth and agent logs
-  instead (`docker compose logs auth agent | grep -E 'Login code|Verification code'`). While an SES account is in
-  the sandbox, it only delivers to addresses verified in SES.
+- **Codes are emailed with Amazon SES** when `UDAHUB_EMAIL_PROVIDER=ses`, and are then never logged
+  (`agentic/mailer.py`). By default they are written to the auth and agent logs instead
+  (`docker compose logs auth agent | grep -E 'Login code|Verification code'`). See [Sending codes by email](#sending-codes-by-email).
 - **An email typed in the chat is verified too.** A guest who types an email gets a code sent to it, and only the
   right code links the ticket to that customer (`agentic/verification.py`, same limits as below, and a human
   verifies identity after three codes on one ticket). The reply never says whether the email has an account.
@@ -232,6 +231,31 @@ How it works:
 - **Tokens** last 60 minutes (`JWT_TTL_MINUTES`). There is no refresh token: the customer logs in again.
 - **Rate limits:** sign-up and login are limited per client IP (10 a minute), and each logged-in customer
   has their own budget, like each API key.
+
+### Sending codes by email
+
+Sign-up, login and chat verification codes go through `agentic/mailer.py`:
+
+| `UDAHUB_EMAIL_PROVIDER` | Sends with | Needs |
+|---|---|---|
+| `log` (default) | Nothing: the code is written to the auth or agent log | Nothing |
+| `ses` | Amazon SES | A sender on a domain verified in SES, and AWS credentials allowed `ses:SendEmail` |
+| `smtp` | Any SMTP server, e.g. Gmail with an app password | `UDAHUB_SMTP_USER` and `UDAHUB_SMTP_PASSWORD` (host and port default to Gmail's) |
+
+The sender has to be on a domain the email is signed for. SES mail "from" a gmail.com address is rejected by
+Gmail, without a bounce or an error from SES, because only Google can sign for gmail.com. The deployment used a
+domain registered in Route 53:
+
+1. Register the domain (cheap endings such as `.link` cost a few dollars a year). Route 53 creates its hosted zone.
+2. Create the domain identity in SES and publish its three DKIM records (the SES console's "Publish DNS records
+   to Route53" button). Make sure the registered domain's name servers are those of the hosted zone that holds the
+   records.
+3. Add a DMARC record: `_dmarc` TXT `"v=DMARC1; p=none;"`.
+4. Set `UDAHUB_EMAIL_FROM=CultPass Support <support@yourdomain>` and restart `auth` and `agent`.
+5. Request SES production access. Until then, the account is in the sandbox and only delivers to addresses
+   verified in SES.
+
+In production, set `UDAHUB_EMAIL_LOG_FALLBACK=false`, so a failed email never puts a code in the logs.
 
 ### Embeddings in Postgres (pgvector)
 
@@ -399,7 +423,8 @@ UDAHUB_TEST_POSTGRES_URL=postgresql+psycopg://postgres:<password>@localhost:5432
 | `UDAHUB_VECTOR_STORE` | knowledge | `pgvector` (the default in docker-compose): article embeddings in the knowledge database. `memory`: rebuilt in memory on every start, as in the notebooks |
 | `UDAHUB_SERVICE_TIMEOUT` | agent | Seconds per internal call (default 15) |
 | Model settings: `UDAHUB_LLM_PROVIDER`, `OPENAI_API_KEY`, `UDAHUB_CHAT_MODEL`, `UDAHUB_EMBEDDING_*`, `UDAHUB_RAG_MIN_SCORE` | agent, knowledge | As in `solution/.env.example`; blank ones use the defaults in `agentic/config.py` |
-| `UDAHUB_EMAIL_PROVIDER`, `UDAHUB_EMAIL_FROM`, `UDAHUB_EMAIL_LOG_FALLBACK` | auth, agent | How one-time codes are delivered: `log` (default) writes them to the service log; `ses` emails them with Amazon SES from the verified sender, and never logs them. With the fallback on, a failed email is logged so a demo can go on |
+| `UDAHUB_EMAIL_PROVIDER`, `UDAHUB_EMAIL_FROM`, `UDAHUB_EMAIL_LOG_FALLBACK` | auth, agent | How one-time codes are delivered: `log` (default) writes them to the service log; `ses` or `smtp` emails them, and never logs them (see [Sending codes by email](#sending-codes-by-email)). With the fallback on, a failed email is logged so a demo can go on |
+| `UDAHUB_SMTP_USER`, `UDAHUB_SMTP_PASSWORD`, `UDAHUB_SMTP_HOST`, `UDAHUB_SMTP_PORT` | auth, agent | For `UDAHUB_EMAIL_PROVIDER=smtp`; host and port default to `smtp.gmail.com:587` (STARTTLS) |
 | `AWS_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | agent, knowledge, auth | For Bedrock (agent, knowledge) and SES (auth, agent) |
 | `UDAHUB_BEDROCK_REQUESTS_PER_MINUTE` | agent, knowledge | Bedrock chat calls a minute, spaced out by a client-side rate limiter shared by every agent (blank: no limit). Set it below the account's quota: a new account may allow only about 19 Claude calls a minute |
 | `UDAHUB_BEDROCK_MAX_TOKENS` | agent, knowledge | Longest reply a Bedrock call may write (default 1024). Bedrock counts it against the tokens-per-minute quota before answering |
@@ -434,8 +459,9 @@ UDAHUB_TEST_POSTGRES_URL=postgresql+psycopg://postgres:<password>@localhost:5432
   a proxy that serves only `/v1`.
 - Service-to-service calls use one shared token over the private Docker network, not mTLS or per-service
   identities.
-- Codes are emailed only with `UDAHUB_EMAIL_PROVIDER=ses`; otherwise they are written to the logs. With SES, set
-  `UDAHUB_EMAIL_LOG_FALLBACK=false` in production, so a failed email never puts a code in the logs.
+- Codes are emailed only with `UDAHUB_EMAIL_PROVIDER=ses` or `smtp`; otherwise they are written to the logs. Set
+  `UDAHUB_EMAIL_LOG_FALLBACK=false` in production, so a failed email never puts a code in the logs. An SES account
+  in the sandbox delivers only to verified addresses until production access is granted.
 - Customer tokens can't be revoked before they expire: there is no logout, refresh token or deny-list, and
   there is no password reset yet. Keep `JWT_TTL_MINUTES` short.
 - The auth service and the gateway share one signing key (HS256). With RS256 or EdDSA, the gateway would hold

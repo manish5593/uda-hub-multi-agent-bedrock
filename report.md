@@ -149,8 +149,10 @@ for them identity is something they proved, not something they typed:
   to read and cancel their bookings, which a live test of the demo page showed. The reply is the same whether or
   not the email has an account, so the chat can't be used to find customers. The pending check is kept in the
   ticket's checkpointed state as an HMAC, so it works the same in the notebooks and the agent service.
-- **Codes are emailed with Amazon SES** (`agentic/mailer.py`), or logged for demos. With SES a code is never
-  logged; the sandbox only delivers to verified addresses.
+- **Codes are emailed with Amazon SES** (`agentic/mailer.py`) from a domain registered in Route 53, verified in
+  SES and signed with DKIM, with a DMARC record; they can also go through SMTP, or to the log for demos. An
+  emailed code is never logged. The first attempt sent "from" a gmail.com address: SES accepted every email and
+  Gmail silently rejected them all, since only Google can sign for gmail.com.
 - **Channels keep their API keys** and still see every ticket. Sign-up and login are rate-limited per client IP,
   and each customer has their own request budget.
 
@@ -418,6 +420,7 @@ Trying the demo page as a customer found this:
 
 | Problem found | Fix |
 |---|---|
+| **Login codes never arrived.** SES sent them "from" a gmail.com address. SES accepted every email and reported no error, but Gmail rejected them: only Google can sign mail for gmail.com, and the codes weren't in spam either. AWS's own verification emails arrived, because they come from amazon.com. | A domain registered in Route 53, verified in SES with three DKIM records and a DMARC record; codes now come from that domain and arrive in the inbox. An SMTP option (e.g. Gmail with an app password) covers setups without a domain. |
 | **Typing someone's email was enough to act on their account.** On the demo page, a guest typed a customer's email and the agent cancelled that customer's booking: the supervisor linked the ticket to whoever owned the email. Login and MFA protected the API, but not this path. Found by trying the demo as a customer. | A typed email now gets a code sent to it, and only the right code links the ticket. The reply is the same for any email, wrong codes are limited, and a human verifies identity after three codes. Replayed through the gateway afterwards: a guessed code was refused and the booking untouched; the real code continued the request. |
 
 ## 7. Lessons
@@ -480,8 +483,8 @@ Trying the demo page as a customer found this:
   per embedding model because it needs a fixed vector dimension.
 - **The gateway's rate limits are per replica.** They are kept in memory; with several gateway replicas they
   would need Redis or Valkey.
-- **Logins are demo-grade in three ways.** Codes are logged unless SES is configured, and the SES account is in
-  the sandbox, so only verified addresses receive them. Tokens can't be revoked before they expire (no logout,
+- **Logins are demo-grade in three ways.** The SES account is still in the sandbox, so only verified addresses
+  receive codes until AWS grants production access, and the log fallback is on. Tokens can't be revoked before they expire (no logout,
   refresh token or password reset). And the auth service and the gateway share one HS256 key, so the gateway
   could create tokens; RS256 or EdDSA would give it only a public key.
 - **Trusted channels are still trusted.** A channel with an API key can name the customer in the metadata

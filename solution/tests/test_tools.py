@@ -642,3 +642,32 @@ def test_a_neighbourhood_given_as_the_location_is_found():
     titles = [e["title"] for e in cp.search_experiences("samba", location="Lapa")]
     assert titles == ["Samba Night at Lapa"]
     assert {e["title"] for e in cp.search_experiences(location="Rio de Janeiro")} >= {"Samba Night at Lapa"}
+
+
+def test_codes_can_be_emailed_through_gmail_smtp(monkeypatch, caplog):
+    """SES mail "from" a gmail.com address is rejected by Gmail; SMTP sends it through Google itself."""
+    import smtplib
+    from agentic import mailer
+    sent = {}
+
+    class FakeSMTP:
+        def __init__(self, host, port, timeout):
+            sent["server"] = (host, port)
+        def __enter__(self): return self
+        def __exit__(self, *exc): return False
+        def starttls(self): sent["tls"] = True
+        def login(self, user, password): sent["login"] = (user, password)
+        def send_message(self, message): sent["message"] = message
+
+    monkeypatch.setattr(smtplib, "SMTP", FakeSMTP)
+    monkeypatch.setenv("UDAHUB_EMAIL_PROVIDER", "smtp")
+    monkeypatch.delenv("UDAHUB_EMAIL_FROM", raising=False)
+    monkeypatch.setenv("UDAHUB_SMTP_USER", "support@example.com")
+    monkeypatch.setenv("UDAHUB_SMTP_PASSWORD", "app-password")
+    with caplog.at_level("INFO"):
+        assert mailer.send_code("bob.stone@granite.com", "482913", "login") is True
+    assert sent["server"] == ("smtp.gmail.com", 587) and sent["tls"]
+    assert sent["login"] == ("support@example.com", "app-password")
+    message = sent["message"]
+    assert message["To"] == "bob.stone@granite.com" and "support@example.com" in message["From"]
+    assert "482913" in message.get_content() and "482913" not in caplog.text
