@@ -268,7 +268,7 @@ def test_model_provider_is_a_configuration_switch(monkeypatch):
     try:
         monkeypatch.setattr(config, "LLM_PROVIDER", "bedrock")
         monkeypatch.setattr(config, "EMBEDDING_PROVIDER", "bedrock")
-        monkeypatch.setattr(config, "CHAT_MODEL", "us.anthropic.claude-3-5-haiku-20241022-v1:0")
+        monkeypatch.setattr(config, "CHAT_MODEL", "us.anthropic.claude-haiku-4-5-20251001-v1:0")
         monkeypatch.setattr(config, "EMBEDDING_MODEL", "amazon.titan-embed-text-v2:0")
         llm.get_llm.cache_clear(); llm.get_embeddings.cache_clear()
         assert isinstance(llm.get_llm(), ChatBedrockConverse)

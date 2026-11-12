@@ -35,7 +35,7 @@ EMBEDDING_PROVIDER = os.getenv("UDAHUB_EMBEDDING_PROVIDER", LLM_PROVIDER).lower(
 _DEFAULT_CHAT_MODELS = {
     "openai": "gpt-4o-mini",
     # Bedrock ids depend on the region and on which models the account has enabled
-    "bedrock": "us.anthropic.claude-3-5-haiku-20241022-v1:0",
+    "bedrock": "us.anthropic.claude-haiku-4-5-20251001-v1:0",
 }
 _DEFAULT_EMBEDDING_MODELS = {
     "openai": "text-embedding-3-small",
