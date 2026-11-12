@@ -3,8 +3,9 @@ the case expects.
 
 The judge sees only the customer's messages, the reply, and the evidence the agents had (the knowledge base
 articles they retrieved, the tool calls and results, the customer's profile and stored preferences). It uses the configured
-chat model unless UDAHUB_EVAL_JUDGE_MODEL names another one from the same provider. A judge from a stronger
-model is more reliable, and avoids a model grading its own replies.
+chat model unless UDAHUB_EVAL_JUDGE_MODEL names another one, from the same provider or from the one in
+UDAHUB_EVAL_JUDGE_PROVIDER ("openai" or "bedrock"). A judge from a stronger model is more reliable, avoids a model
+grading its own replies, and keeps scores comparable when the agents' provider changes.
 """
 import json
 import os
@@ -47,10 +48,14 @@ class KeyPoints(BaseModel):
     verdicts: list[PointVerdict] = Field(description="One verdict per expected point, in the same order")
 
 
+def judge_provider() -> str:
+    return (os.getenv("UDAHUB_EVAL_JUDGE_PROVIDER") or config.LLM_PROVIDER).lower()
+
+
 @lru_cache(maxsize=None)
 def judge_llm() -> BaseChatModel:
     model = os.getenv("UDAHUB_EVAL_JUDGE_MODEL") or config.CHAT_MODEL
-    if config.LLM_PROVIDER == "bedrock":
+    if judge_provider() == "bedrock":
         from langchain_aws import ChatBedrockConverse
         return ChatBedrockConverse(model=model, region_name=config.AWS_REGION, temperature=0, max_tokens=2048)
     from langchain_openai import ChatOpenAI

@@ -55,8 +55,11 @@ SAGEMAKER_ENDPOINT = os.getenv("UDAHUB_SAGEMAKER_ENDPOINT", "udahub-embeddings")
 # Decision thresholds
 CLASSIFIER_MIN_CONFIDENCE = float(os.getenv("UDAHUB_CLASSIFIER_MIN_CONFIDENCE", 0.5))
 RESOLUTION_MIN_CONFIDENCE = float(os.getenv("UDAHUB_RESOLUTION_MIN_CONFIDENCE", 0.7))
-# Minimum retrieval score for a KB article to count as relevant
-RAG_MIN_SCORE_EMBEDDING = float(os.getenv("UDAHUB_RAG_MIN_SCORE", 0.30))
+# Minimum retrieval score for a KB article to count as relevant. Each embedding model scores on its own scale:
+# Titan's right articles score from 0.26 ("my card was charged twice") and questions no article covers at most
+# 0.20 (parking), where OpenAI's are 0.45 and 0.41, so each provider has its own default.
+_DEFAULT_RAG_MIN_SCORES = {"openai": 0.30, "bedrock": 0.24, "sagemaker": 0.30}
+RAG_MIN_SCORE_EMBEDDING = float(os.getenv("UDAHUB_RAG_MIN_SCORE", _DEFAULT_RAG_MIN_SCORES[EMBEDDING_PROVIDER]))
 RAG_MIN_SCORE_KEYWORD = 0.10
 RAG_TOP_K = 3
 
