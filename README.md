@@ -69,8 +69,8 @@ The same workflow, with the same nodes, prompts, tools and rules, runs in two wa
 ![UDA-Hub deployment as microservices](design/deployment.svg)
 
 An evaluation suite ([`solution/evals/`](solution/evals/README.md)) runs 36 labelled tickets against the real model
-and reports routing, outcome, tool and answer accuracy: **108 of 108 runs passed every check (100%)** in the
-latest evaluation, up from 88% at the first ([results](#evaluation-results)). Earlier runs scored 94–99%, so
+and reports routing, outcome, tool and answer accuracy: **108 of 108 runs passed every check (100%)** in each
+of the last two evaluations, up from 88% at the first ([results](#evaluation-results)). Earlier runs scored 94–99%, so
 expect an occasional miss. GitHub
 Actions runs the offline tests on every pull request.
 
@@ -311,7 +311,7 @@ The model's wording varies from run to run. Before the last two fixes (report se
 ### Evaluation results
 
 The evaluation suite runs 36 labelled tickets, 3 times each, with `gpt-4o-mini` running the agents and `gpt-4o`
-as the judge. In the latest evaluation, **108 of 108 runs passed every check (100%)**, with a median of 4.9
+as the judge. The last two evaluations each passed **108 of 108 runs (100%)**, with a median of 4.7 to 4.9
 seconds per message. The first scored 95 of 108 (88%).
 
 | Category | First | Latest | | Check | First | Latest |
@@ -329,8 +329,8 @@ how-to questions go to the knowledge agent instead of being asked for an email; 
 account details the agent was given; code decides whether a reply waits for the customer and whether a human
 is needed; search results say whether the customer can book each experience; and a `recommend_experiences`
 tool suggests only what fits the customer's stored preferences. Four changes were to the evaluation itself,
-each checked against the evidence first. It is one run: the ones before it each missed one or two, so expect
-98–100% when it is repeated. With `gpt-4o-mini` judging its own replies, the first evaluation scored 69%,
+each checked against the evidence first. That is two runs in a row; the ones before them each missed one or two, so
+expect 98–100% when it is repeated. With `gpt-4o-mini` judging its own replies, the first evaluation scored 69%,
 mostly from faithfulness failures on correct answers. The details are in [`report.md`](report.md#evaluation).
 
 ## Project Instructions

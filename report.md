@@ -17,7 +17,7 @@ sessions.
 | **Deployment** | `service/`: an API gateway and five services (agent, CultPass, tickets, knowledge, auth) with Postgres and pgvector, Alembic migrations, Docker Compose, customer sign-up and login with JWTs, Prometheus with a Grafana dashboard, optional Langfuse tracing, and a web chat for demos (section 4). Run end to end with the real model |
 | **Demonstration** | `solution/03_agentic_app.ipynb`, committed with the outputs of a real-model run: 13 scenarios, 5 edge cases, and demos of routing, retrieval, tools, memory and logs |
 | **Tests** | 86 offline tests in `solution/tests` (36 unit, 20 end-to-end through the graph with a scripted model, 26 for the evaluation suite, 4 for tracing) and 108 in `service/tests` (services, customer logins and tokens, the full HTTP flow, migrations on SQLite and Postgres, and the pgvector index on Postgres). No API key needed; GitHub Actions runs them on every pull request |
-| **Evaluation** | `solution/evals`: 36 labelled tickets, 3 runs each, against the real model, scored in code and by an LLM judge. **108 of 108 runs (100%) passed every check** in the latest evaluation, up from 95 (88%) at the first one; the runs in between scored 94–99%, so expect a run to miss one or two (section 5) |
+| **Evaluation** | `solution/evals`: 36 labelled tickets, 3 runs each, against the real model, scored in code and by an LLM judge. **108 of 108 runs (100%) passed every check** in each of the last two evaluations, up from 95 (88%) at the first; the runs in between scored 94–99%, so expect an occasional miss (section 5) |
 | **Environment** | Python 3.11, LangGraph 1.2.20, LangChain 1.4.9, langchain-openai 1.7.4, langchain-aws 1.9.2, SQLAlchemy 2.1, FastAPI 0.162, Postgres 16 with pgvector 0.8.7, PyJWT 2.15, bcrypt 5.0, Langfuse 4.78 (SDK 5.2) |
 
 The main lesson matched what I'd learned building earlier agent systems: **the LLM proposes, code decides.**
@@ -239,8 +239,8 @@ made the cancellation check and Frank's first recommendation consistent as well.
 ### Evaluation
 
 The evaluation suite runs 36 labelled tickets, 3 times each (108 runs), with `gpt-4o-mini` running the agents
-and `gpt-4o` as the judge. In the latest evaluation, **108 of 108 runs passed every check (100%)**, with a median
-of 4.9 seconds per message.
+and `gpt-4o` as the judge. The last two evaluations each passed **108 of 108 runs (100%)**, with a median of 4.7 to 4.9 seconds per
+message. The second ran after the two fixes found by re-running notebook 03 (section 6).
 
 | Check | First evaluation | Latest |
 |---|---|---|
@@ -282,18 +282,19 @@ couldn't find. Each evaluation in between pointed to the next problem, and secti
 | 5 | 106 / 108 (98%) | Code decides whether a human is needed; reservations say whose they are |
 | 6 | 107 / 108 (99%) | `recommend_experiences`; ids in the draft are checked |
 | 7 | 108 / 108 (100%) | The judge counts an article's suggested phrasing as evidence |
+| 8 | 108 / 108 (100%) | Stated interests go to `recommend_experiences`; the agent checks account state before confirming it |
 
 Three caveats about the 100%:
 
-- **It is one evaluation.** The model's answers vary, and the runs before it each missed one or two in
+- **It is two evaluations.** The model's answers vary, and the runs before them each missed one or two in
   different cases. Expect 98–100% when it is repeated.
 - **Four of the changes were to the evaluation, not the agents.** Two loosened it: the judge doesn't count
   hedged suggestions ("you might enjoy") or an article's own suggested phrasing as unsupported claims. One
   tightened it: the recommendation case now checks that nothing is said to fit Bob's interests unless it does.
   And the quota case no longer requires a `get_my_account` call, because code already loads the account for every
   message and gives it to the agent; its key point still checks the number. Each change was checked against the
-  articles and tool results first. Under the old quota expectation, the latest evaluation would be 105 of 108
-  (97%).
+  articles and tool results first. Under the old quota expectation, the last two evaluations would be 105 and
+  106 of 108 (97% and 98%).
 - **A perfect run can't show that the judge would still catch a real error.** The earlier runs, with the same
   judge, did catch real ones: padded recommendations, and a reservation described as someone else's.
 
