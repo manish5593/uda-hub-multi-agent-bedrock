@@ -33,7 +33,8 @@ if __name__ == "__main__":
 
 from langgraph.checkpoint.memory import MemorySaver  # noqa: E402
 
-from agentic import config  # noqa: E402
+from agentic import config, verification  # noqa: E402
+from agentic.verification import deliver_code  # noqa: E402
 from agentic.demo_data import copy_demo_databases  # noqa: E402
 from agentic.tools import db  # noqa: E402
 from agentic.workflow import build_graph, process_ticket  # noqa: E402
@@ -67,16 +68,20 @@ def run_case(case: Case, run: int, judge=llm_judge) -> dict:
             graph = build_graph(MemorySaver())
             ticket_id = f"eval-{case.id}-{run}"
             customer_messages, turns = [], []
+            # The customer's inbox: a turn's "{code}" is replaced by the last verification code sent
+            inbox = []
+            verification.deliver_code = lambda email, code: inbox.append(code)
             for i, turn in enumerate(case.turns):
-                customer_messages.append(turn.text)
+                text = turn.text.replace("{code}", inbox[-1]) if inbox else turn.text
+                customer_messages.append(text)
                 start = time.perf_counter()
-                state = process_ticket(turn.text, ticket_id, turn.metadata, agent=graph)
+                state = process_ticket(text, ticket_id, turn.metadata, agent=graph)
                 seconds = time.perf_counter() - start
                 checks = deterministic_checks(turn.expect, state)
                 if judge is not None:
                     checks += judged_checks(turn.expect, state, customer_messages, judge)
                 turns.append({
-                    "turn": i + 1, "text": turn.text, "reply": state.get("final_response", ""),
+                    "turn": i + 1, "text": text, "reply": state.get("final_response", ""),
                     "issue_type": (state.get("classification") or {}).get("issue_type"),
                     "route": state.get("route"), "route_reason": state.get("route_reason"),
                     "status": state.get("ticket_status"),
@@ -85,6 +90,7 @@ def run_case(case: Case, run: int, judge=llm_judge) -> dict:
                     "seconds": round(seconds, 2), "checks": [c.to_dict() for c in checks],
                 })
         finally:
+            verification.deliver_code = deliver_code
             config.UDAHUB_DB_PATH, config.CULTPASS_DB_PATH, config.EVENT_LOG_PATH = saved
             db._engine.cache_clear()  # drop the engines of the deleted copies
     scored = [c for t in turns for c in t["checks"] if c["passed"] is not None]

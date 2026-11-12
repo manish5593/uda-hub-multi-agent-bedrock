@@ -1,6 +1,7 @@
 """Classifier agent: understands the ticket and produces a structured classification."""
 from langchain_core.messages import HumanMessage, SystemMessage
 
+from agentic import verification
 from agentic.agents.common import add_trace, conversation_text, customer_context_block, last_user_message
 from agentic.llm import get_llm
 from agentic.state import TicketClassification
@@ -40,6 +41,14 @@ def classify(state: dict) -> dict:
         # Nothing to classify: no LLM call, the supervisor asks the customer what they need
         return {"classification": dict(EMPTY_MESSAGE), "trace": add_trace(
             state, "[classifier] empty message", event="classify", issue_type="other", empty_message=True)}
+    pending = state.get("pending_verification")
+    if (not (state.get("customer") or {}).get("identified") and verification.is_pending(pending)
+            and pending.get("classification") and verification.is_code_only(last_user_message(state))):
+        # Just the verification code: the request is the one made when the customer was asked who they are
+        c = dict(pending["classification"])
+        return {"classification": c, "trace": add_trace(
+            state, f"[classifier] verification code: continuing the {c.get('issue_type')} request",
+            event="classify", issue_type=c.get("issue_type"), verification_code=True)}
     llm = get_llm().with_structured_output(TicketClassification)
     result: TicketClassification = llm.invoke([
         SystemMessage(content=CLASSIFIER_PROMPT),

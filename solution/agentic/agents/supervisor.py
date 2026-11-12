@@ -5,8 +5,8 @@ business rules on top of that classification.
 """
 from langchain_core.messages import HumanMessage, SystemMessage
 
-from agentic import config
-from agentic.agents.common import add_trace
+from agentic import config, verification
+from agentic.agents.common import add_trace, last_user_message
 from agentic.agents.memory_agent import build_customer, recall
 from agentic.llm import get_llm
 from agentic.tools import cultpass_tools, ticket_tools
@@ -76,27 +76,61 @@ def route_ticket(classification: dict, customer: dict, ticket_status: str,
     return "knowledge_agent", f"{c.get('issue_type')} can be answered from the knowledge base"
 
 
+def _ask(state: dict, update: dict, info_request: str, reason: str) -> dict:
+    """Route to request_info with what to ask for (see REQUEST_INFO_MESSAGES)."""
+    return {**update, "route": "request_info", "route_reason": reason, "info_request": info_request,
+            "trace": add_trace(state, f"[supervisor] route -> request_info: {reason}", event="route",
+                               route="request_info", reason=reason)}
+
+
 def supervise(state: dict) -> dict:
     update = {}
     customer = state.get("customer") or {}
-    email = (state.get("classification") or {}).get("customer_email")
+    classification = state.get("classification") or {}
+    email = classification.get("customer_email")
+    pending = state.get("pending_verification")
 
-    # Identify a guest customer from an email they gave in the conversation
-    if not customer.get("identified") and email:
-        profile = cultpass_tools.find_customer_by_email(email)
-        if profile:
-            ticket_tools.link_ticket_to_customer(state["ticket_id"], profile["user_id"], profile["name"])
-            ticket = ticket_tools.get_or_create_ticket(state["ticket_id"])
-            customer = build_customer(ticket)
-            update.update(customer=customer, **recall(customer, state["ticket_id"]))
-            state = {**state, "trace": add_trace(state, f"[supervisor] identified customer {profile['name']} via {email}",
-                                             event="identify", customer=profile["user_id"])}
-        else:
-            state = {**state, "trace": add_trace(state, f"[supervisor] no customer found for {email}", event="identify", customer=None)}
+    # A guest who typed an email proves it with the code sent there before anything on that account is
+    # shown or changed (agentic/verification.py)
+    if not customer.get("identified"):
+        code = verification.find_code(last_user_message(state)) if verification.is_pending(pending) else None
+        if code:
+            kept, outcome = verification.check(pending, code)
+            update["pending_verification"] = kept
+            if outcome != "verified":
+                state = {**state, "trace": add_trace(state, f"[supervisor] verification code {outcome}",
+                                                     event="verify", outcome=outcome)}
+                return _ask(state, update, f"code_{outcome}", f"verification code {outcome}")
+            ticket_tools.link_ticket_to_customer(state["ticket_id"], pending["user_id"], pending["user_name"])
+            customer = build_customer(ticket_tools.get_or_create_ticket(state["ticket_id"]))
+            # Carry on with the request the customer made when they were asked who they are
+            classification = pending.get("classification") or classification
+            update.update(customer=customer, classification=classification, **recall(customer, state["ticket_id"]))
+            state = {**state, "trace": add_trace(
+                state, f"[supervisor] identified customer {pending['user_name']}: verified the code sent to "
+                       f"{pending['email']}", event="identify", customer=pending["user_id"], method="email_code")}
+        elif email:
+            profile = cultpass_tools.find_customer_by_email(email)
+            new, outcome = verification.start(email, profile, classification, pending)
+            update["pending_verification"] = new
+            found = "an account" if profile else "no account"
+            state = {**state, "trace": add_trace(state, f"[supervisor] {email} ({found}): code {outcome}",
+                                                 event="verify", outcome=f"code_{outcome}", account_found=bool(profile))}
+            if outcome == "too_many":
+                reason = "identity verification: too many codes requested on this ticket, a human must verify"
+                return {**update, "route": "escalation_agent", "route_reason": reason, "trace": add_trace(
+                    state, f"[supervisor] route -> escalation_agent: {reason}", event="route",
+                    route="escalation_agent", reason=reason)}
+            # Same reply whether or not the email has an account
+            return _ask(state, {**update, "info_request_email": email.strip().lower()}, "code_sent",
+                        "verification code sent to the email the customer gave")
 
-    route, reason = route_ticket(state["classification"], customer, state.get("ticket_status", "open"),
+    route, reason = route_ticket(classification, customer, state.get("ticket_status", "open"),
                                  frozenset(repeat_issue_types({**state, **update})),
                                  reported_urgency=(state.get("metadata") or {}).get("urgency"))
+    if route == "request_info" and not customer.get("identified") and verification.is_pending(pending):
+        # Asked who they are, the customer hasn't typed the code yet: remind them of it
+        update.update(info_request="code_reminder", info_request_email=pending["email"])
     update.update(route=route, route_reason=reason,
                   trace=add_trace(state, f"[supervisor] route -> {route}: {reason}", event="route", route=route, reason=reason))
     return update
@@ -124,18 +158,33 @@ def _in_customer_language(message: str, language: str) -> str:
     return reply.content.strip() or message
 
 
+# What request_info says for each step of verifying a typed email. The text never says whether the email
+# has an account.
+REQUEST_INFO_MESSAGES = {
+    "code_sent": ("Thanks! To protect your account, I've sent a 6-digit code to {email} if it's registered "
+                  "with CultPass. Please type the code here to continue. If nothing arrives within a few minutes, "
+                  "check the address and send it again."),
+    "code_reminder": ("To continue, please type the 6-digit code I sent to {email}. If it didn't arrive, "
+                      "send your email address again."),
+    "code_wrong": "That code doesn't match. Please check the latest email from us and type the 6-digit code again.",
+    "code_burnt": ("That code didn't match too many times, so it no longer works. Please send your email "
+                   "address again and I'll send a new code."),
+    "code_expired": "That code has expired. Please send your email address again and I'll send a new code.",
+}
+
+
 def request_info(state: dict) -> dict:
     """Ask the customer for the information needed to continue (keeps the ticket open)."""
     classification = state.get("classification") or {}
-    email = classification.get("customer_email")
+    kind = state.get("info_request")
     message = REQUEST_INFO_MESSAGE
     if classification.get("empty_message"):
         message = EMPTY_MESSAGE_REPLY
-    if email:
-        message = (f"I couldn't find a CultPass account registered with {email}. Could you double-check "
-                   "the email address you use to log in to CultPass?")
+    elif kind in REQUEST_INFO_MESSAGES:
+        message = REQUEST_INFO_MESSAGES[kind].format(email=state.get("info_request_email") or "your email")
     language = classification.get("language", "English")
-    asked = "what they need help with" if classification.get("empty_message") else "to identify themselves"
+    asked = ("what they need help with" if classification.get("empty_message")
+             else kind.replace("_", " ") if kind else "to identify themselves")
     return {"final_response": _in_customer_language(message, language),
             "trace": add_trace(state, f"[request_info] asked customer {asked} ({language})",
                                event="request_info", asked=asked, language=language)}

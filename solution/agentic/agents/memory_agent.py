@@ -98,6 +98,8 @@ def load_context(state: dict, config: RunnableConfig) -> dict:
         "assessment": {},
         "escalation": None,
         "final_response": "",
+        "info_request": None,
+        "info_request_email": None,
         "trace": add_trace({}, entry, event="load_context", ticket_id=ticket_id,  # trace is per turn
                            customer=customer.get("external_user_id"), identified=customer["identified"],
                            ticket_status=ticket["status"], memories=len(recalled["memories"]),

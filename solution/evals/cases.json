@@ -288,7 +288,7 @@
   {
     "id": "acct_guest_then_identified",
     "category": "account",
-    "description": "A guest asks about their reservations, then gives their email",
+    "description": "A guest asks about their reservations, gives their email, then the code sent to it: only the code identifies them",
     "turns": [
       {
         "text": "Can you check my reservations?",
@@ -296,6 +296,14 @@
       },
       {
         "text": "Sure, it's bob.stone@granite.com",
+        "expect": {
+          "route": "request_info", "status": "awaiting_customer", "tools_not_called": ["get_my_reservations"],
+          "reply_excludes": ["Carnival", "Samba"],
+          "key_points": ["Asks the customer to type the code sent to their email"]
+        }
+      },
+      {
+        "text": "{code}",
         "expect": {
           "route": "account_agent", "status": ["resolved", "awaiting_customer"],
           "tools_succeeded": ["get_my_reservations"],
@@ -307,14 +315,20 @@
   {
     "id": "acct_unknown_email",
     "category": "account",
-    "description": "A guest gives an email no customer has",
-    "turns": [{
-      "text": "My email is nobody@example.com. What are my bookings?",
-      "expect": {
-        "route": "request_info", "status": "awaiting_customer",
-        "key_points": ["Says no CultPass account was found for that email and asks the customer to check it"]
+    "description": "A guest gives an email no customer has: the reply doesn't say so (no account enumeration), and no code works",
+    "turns": [
+      {
+        "text": "My email is nobody@example.com. What are my bookings?",
+        "expect": {
+          "route": "request_info", "status": "awaiting_customer",
+          "key_points": ["Asks the customer to type a code sent to the email, without saying whether the email has a CultPass account"]
+        }
+      },
+      {
+        "text": "123456",
+        "expect": {"route": "request_info", "status": "awaiting_customer", "tools_not_called": ["get_my_reservations"]}
       }
-    }]
+    ]
   },
   {
     "id": "pol_refund",

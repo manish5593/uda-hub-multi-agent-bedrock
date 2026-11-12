@@ -77,6 +77,16 @@
   #text:focus, #key:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
   #key { width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); font: inherit; }
   .hint { font-size: 12px; color: var(--muted); margin-top: 6px; }
+  .login form { display: block; padding: 0; border: 0; }
+  .login input { width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg);
+                 color: var(--ink); font: inherit; margin-bottom: 6px; }
+  .login input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  .login .row { display: flex; gap: 6px; }
+  .login .row .btn { flex: 1; }
+  .login .err { color: var(--esc); font-size: 12px; min-height: 0; margin: 2px 0 6px; }
+  .login .ok { color: var(--ok); font-size: 12px; margin: 2px 0 6px; }
+  .me { padding: 8px 10px; border-radius: 8px; border: 1px solid var(--accent); background: var(--chip); margin-bottom: 6px; }
+  .me small { display: block; color: var(--muted); font-size: 12px; }
   .banner { margin: 12px 20px 0; padding: 10px 14px; border-radius: 10px; background: var(--esc-bg); color: var(--esc); font-size: 14px; display: none; }
   @media (max-width: 760px) {
     .app { grid-template-columns: 1fr; grid-template-rows: auto 1fr; height: auto; }
@@ -96,8 +106,29 @@
     <h1>UDA-Hub</h1>
     <div class="sub">Multi-agent support for CultPass</div>
 
-    <div class="label">Talk as</div>
+    <div class="label">Customer login</div>
+    <div class="login" id="login">
+      <form id="pw-form">
+        <input id="email" type="email" autocomplete="username" placeholder="Email" required>
+        <input id="password" type="password" autocomplete="current-password" placeholder="Password" required>
+        <button class="btn primary" style="width:100%" type="submit">Log in</button>
+      </form>
+      <form id="code-form" style="display:none">
+        <div class="ok" id="code-sent"></div>
+        <input id="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" placeholder="6-digit code" required>
+        <div class="row"><button class="btn primary" type="submit">Verify</button><button class="btn" id="code-cancel" type="button">Back</button></div>
+        <div class="hint">Demo: codes are logged, not emailed. <code>docker compose logs auth | grep 'Login code'</code></div>
+      </form>
+      <div id="me" style="display:none">
+        <div class="me"><span id="me-name"></span><small id="me-email"></small><small id="me-exp"></small></div>
+        <button class="btn" id="logout" type="button" style="width:100%">Log out</button>
+      </div>
+      <div class="err" id="login-err"></div>
+    </div>
+
+    <div class="label">Or a channel persona</div>
     <div class="customers" id="customers"></div>
+    <div class="hint">Trusted channel: the API key vouches for who the customer is, with no login. A guest who types an email gets a code to prove it.</div>
 
     <div class="label">Conversation</div>
     <button class="btn" id="new" type="button">New conversation</button>
@@ -162,6 +193,13 @@ $("key").addEventListener("change", () => store.set("udahub.key", $("key").value
 let current = CUSTOMERS[0];
 let ticketId = null;
 let busy = false;
+// A logged-in customer: { token, name, email, expires } (kept for this tab only)
+let session = null;
+try { session = JSON.parse(sessionStorage.getItem("udahub.session") || "null"); } catch { session = null; }
+if (session && new Date(session.expires) <= new Date()) session = null;
+
+const LOGGED_IN_TRIES = ["Which reservations do I have?", "What can I book this week?",
+                         "How many experiences do I have left this month?", "I was charged twice this month."];
 
 function newTicketId() {
   const rand = Math.random().toString(36).slice(2, 8);
@@ -173,14 +211,14 @@ function renderCustomers() {
   for (const c of CUSTOMERS) {
     const b = document.createElement("button");
     b.type = "button";
-    b.className = "cust" + (c === current ? " active" : "");
+    b.className = "cust" + (!session && c === current ? " active" : "");
     const left = document.createElement("span");
     left.innerHTML = `<div></div><small></small>`;
     left.firstChild.textContent = c.name;
     left.lastChild.textContent = c.email || c.note;
     b.append(left);
     if (c.blocked) { const t = document.createElement("span"); t.className = "tag"; t.textContent = "blocked"; b.append(t); }
-    b.addEventListener("click", () => { if (!busy) { current = c; startConversation(); } });
+    b.addEventListener("click", () => { if (!busy) { current = c; if (session) logout(false); startConversation(); } });
     $("customers").append(b);
   }
 }
@@ -188,14 +226,17 @@ function renderCustomers() {
 function startConversation() {
   ticketId = newTicketId();
   renderCustomers();
-  $("who").textContent = current.email ? `${current.name} · ${current.note}` : "Guest (not identified)";
+  $("who").textContent = session ? `${session.name} · logged in (password + code)`
+    : current.email ? `${current.name} · ${current.note} · via channel` : "Guest (not identified)";
   $("ticket").textContent = `ticket ${ticketId}`;
   $("log").innerHTML = "";
   const empty = document.createElement("div");
   empty.className = "empty";
-  empty.textContent = current.email
-    ? `Chatting as ${current.name}. The agents can look up their account, bookings and subscription.`
-    : "Chatting as a guest. Ask a general question, or ask for an account action and the agent will ask who you are.";
+  empty.textContent = session
+    ? `Logged in as ${session.name}. Your token proves who you are; you can only see your own tickets.`
+    : current.email
+    ? `Chatting as ${current.name} through a trusted channel: the API key vouches for who they are.`
+    : "Chatting as a guest. Ask a general question, or ask for an account action: the agent asks for your email, then for the code sent to it.";
   $("log").append(empty);
   renderChips();
   hideBanner();
@@ -204,7 +245,7 @@ function startConversation() {
 
 function renderChips() {
   $("chips").innerHTML = "";
-  for (const t of current.tries) {
+  for (const t of (session ? LOGGED_IN_TRIES : current.tries)) {
     const b = document.createElement("button");
     b.type = "button"; b.className = "chip"; b.textContent = t;
     b.addEventListener("click", () => { if (!busy) send(t); });
@@ -275,8 +316,8 @@ async function send(text) {
   text = text.trim();
   if (!text || busy) return;
   const key = $("key").value.trim();
-  if (!key) { showBanner("Enter the channel API key in the sidebar first."); $("key").focus(); return; }
-  store.set("udahub.key", key);
+  if (!session && !key) { showBanner("Enter the channel API key in the sidebar first, or log in."); $("key").focus(); return; }
+  if (key) store.set("udahub.key", key);
   hideBanner();
   $("text").value = "";
   addMessage("user", text);
@@ -284,14 +325,19 @@ async function send(text) {
   setBusy(true);
   const started = performance.now();
   const metadata = { channel: "web" };
-  if (current.email) metadata.email = current.email;
+  const headers = { "Content-Type": "application/json" };
+  if (session) {
+    headers.Authorization = `Bearer ${session.token}`;   // who the customer is comes from the token only
+  } else {
+    headers["X-API-Key"] = key;
+    if (current.email) metadata.email = current.email;    // a trusted channel vouches for its persona
+  }
   try {
     const r = await fetch(`/v1/tickets/${encodeURIComponent(ticketId)}/messages`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-API-Key": key },
-      body: JSON.stringify({ text, metadata }),
+      method: "POST", headers, body: JSON.stringify({ text, metadata }),
     });
     typing.remove();
+    if (r.status === 401 && session) { logout(false); showBanner("Your session has expired. Log in again."); return; }
     if (r.status === 401) { showBanner("The API key was rejected. Check it in the sidebar."); return; }
     if (r.status === 429) { showBanner("Rate limit reached. Wait a minute and try again."); return; }
     if (!r.ok) { showBanner(`The gateway answered ${r.status}. Check the service logs.`); return; }
@@ -317,8 +363,85 @@ async function checkHealth() {
   }
 }
 
+// --- Customer login: password, then the code sent to the email ---------------------------------
+function loginError(text) { $("login-err").textContent = text || ""; }
+
+function claims(token) {
+  try { return JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))); } catch { return {}; }
+}
+
+function renderLogin() {
+  const step = session ? "me" : ($("code-form").dataset.email ? "code" : "pw");
+  $("pw-form").style.display = step === "pw" ? "" : "none";
+  $("code-form").style.display = step === "code" ? "" : "none";
+  $("me").style.display = step === "me" ? "" : "none";
+  if (session) {
+    $("me-name").textContent = session.name;
+    $("me-email").textContent = session.email;
+    $("me-exp").textContent = `token valid until ${new Date(session.expires).toLocaleTimeString()}`;
+  }
+}
+
+async function postJSON(path, body) {
+  const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  let data = {};
+  try { data = await r.json(); } catch {}
+  return { status: r.status, data };
+}
+
+function detail(data, fallback) {
+  if (typeof data.detail === "string") return data.detail;
+  if (Array.isArray(data.detail) && data.detail[0]) return data.detail[0].msg;
+  return fallback;
+}
+
+$("pw-form").addEventListener("submit", async (e) => {
+  e.preventDefault(); loginError("");
+  const email = $("email").value.trim();
+  const { status, data } = await postJSON("/v1/auth/login", { email, password: $("password").value });
+  $("password").value = "";
+  if (status === 200 && data.access_token) { return signedIn(email, data); }   // login codes turned off
+  if (status === 202) {
+    $("code-form").dataset.email = email;
+    $("code-sent").textContent = `Code sent to ${email}.`;
+    renderLogin(); $("code").focus(); return;
+  }
+  if (status === 429) return loginError("Too many attempts. Wait a minute and try again.");
+  if (status === 503) return loginError("Customer login is not configured on this server.");
+  loginError(detail(data, "Incorrect email or password."));
+});
+
+$("code-form").addEventListener("submit", async (e) => {
+  e.preventDefault(); loginError("");
+  const email = $("code-form").dataset.email;
+  const { status, data } = await postJSON("/v1/auth/login/verify", { email, code: $("code").value.trim() });
+  $("code").value = "";
+  if (status === 200 && data.access_token) return signedIn(email, data);
+  if (status === 429) return loginError("Too many attempts. Wait a minute and try again.");
+  loginError(detail(data, "That code didn't work."));
+});
+
+$("code-cancel").addEventListener("click", () => { delete $("code-form").dataset.email; loginError(""); renderLogin(); });
+
+function signedIn(email, data) {
+  const c = claims(data.access_token);
+  session = { token: data.access_token, name: c.name || email, email, expires: data.expires_at };
+  try { sessionStorage.setItem("udahub.session", JSON.stringify(session)); } catch {}
+  delete $("code-form").dataset.email;
+  renderLogin(); startConversation();
+}
+
+function logout(restart = true) {
+  session = null;
+  try { sessionStorage.removeItem("udahub.session"); } catch {}
+  renderLogin();
+  if (restart) startConversation();
+}
+$("logout").addEventListener("click", () => { if (!busy) logout(); });
+
 $("form").addEventListener("submit", (e) => { e.preventDefault(); send($("text").value); });
 $("new").addEventListener("click", () => { if (!busy) startConversation(); });
+renderLogin();
 startConversation();
 checkHealth();
 setInterval(checkHealth, 15000);

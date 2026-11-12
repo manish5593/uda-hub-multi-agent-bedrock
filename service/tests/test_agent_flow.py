@@ -113,12 +113,19 @@ def test_conversation_continues_across_turns_and_identifies_the_customer(agent_c
     llm.outputs[ResolutionAssessment] = ResolutionAssessment(
         confidence=0.9, grounded=True, answered_by_evidence=False, awaiting_customer=True,
         reason="clarifying question")
+    from agentic import verification
+    inbox = {}
+    monkeypatch.setattr(verification, "deliver_code", lambda email, code: inbox.__setitem__(email, code))
+    # The typed email alone identifies nobody: a code goes to it, and the ticket waits for it
     second = agent_client.post("/tickets/t-guest/messages", json={"text": "It's bob.stone@granite.com"}).json()
+    assert second["route"] == "request_info" and second["status"] == "awaiting_customer"
+    assert second["tools_used"] == [] and ticket_tools.get_ticket("t-guest")["external_user_id"] != "f556c0"
 
-    assert second["route"] == "account_agent"
-    assert second["tools_used"] == ["get_my_reservations"]
-    assert second["status"] == "awaiting_customer"
-    assert any("identified customer Bob Stone" in line for line in second["trace"])
+    third = agent_client.post("/tickets/t-guest/messages", json={"text": inbox["bob.stone@granite.com"]}).json()
+    assert third["route"] == "account_agent"
+    assert third["tools_used"] == ["get_my_reservations"]
+    assert third["status"] == "awaiting_customer"
+    assert any("identified customer Bob Stone" in line for line in third["trace"])
     ticket = ticket_tools.get_ticket("t-guest")
     assert ticket["external_user_id"] == "f556c0"
 
@@ -211,6 +218,9 @@ def test_demo_page_is_served_without_secrets(gateway):
     # The page never embeds a key: the person using it types one in
     for key in [API_KEY, "other-key"]:
         assert key not in page.text
+    # Customers can log in on the page with both steps, and then chat with their own token
+    for path in ("/v1/auth/login", "/v1/auth/login/verify", "Authorization"):
+        assert path in page.text
 
 
 def test_gateway_rate_limits_each_key(gateway):

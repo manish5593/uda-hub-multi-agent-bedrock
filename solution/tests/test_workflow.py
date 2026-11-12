@@ -106,16 +106,16 @@ def test_blocked_customer_goes_straight_to_escalation(run):
     assert "blocked" in state["route_reason"]
 
 
-def test_multi_turn_identification_and_short_term_memory(run, monkeypatch):
-    graph = run(classification=classification(issue_type="reservation", requires_account_action=True))
-    first = process_ticket("Please cancel my reservation", "t-guest", agent=graph)
-    assert first["route"] == "request_info"
-    assert first["ticket_status"] == "awaiting_customer"
+@pytest.fixture
+def inbox(monkeypatch):
+    """Verification codes the chat 'emails', by address."""
+    from agentic import verification
+    sent = {}
+    monkeypatch.setattr(verification, "deliver_code", lambda email, code: sent.__setitem__(email, code))
+    return sent
 
-    # Second turn on the same thread: the customer gives their email
-    classifier.get_llm().outputs[TicketClassification] = classification(
-        issue_type="reservation", requires_account_action=True, customer_email="bob.stone@granite.com")
 
+def _scripted_account_agent(monkeypatch, reply="Which reservation should I cancel?"):
     def fake_agent(*args, **kwargs):
         class _Agent:
             def invoke(self, payload, config=None):
@@ -123,19 +123,105 @@ def test_multi_turn_identification_and_short_term_memory(run, monkeypatch):
                 return {"messages": [*payload["messages"],
                                      AIMessage(content="", tool_calls=[call]),
                                      ToolMessage(content="[]", tool_call_id="c1"),
-                                     AIMessage(content="Which reservation should I cancel?")]}
+                                     AIMessage(content=reply)]}
         return _Agent()
     monkeypatch.setattr(account_agent, "create_agent", fake_agent)
-    second = process_ticket("It's bob.stone@granite.com", "t-guest", agent=graph)
 
-    assert second["customer"]["name"] == "Bob Stone"
-    assert second["route"] == "account_agent"
-    assert [a["tool"] for a in second["actions_taken"]] == ["get_my_reservations"]
+
+def test_multi_turn_identification_and_short_term_memory(run, monkeypatch, inbox):
+    graph = run(classification=classification(issue_type="reservation", requires_account_action=True))
+    first = process_ticket("Please cancel my reservation", "t-guest", agent=graph)
+    assert first["route"] == "request_info"
+    assert first["ticket_status"] == "awaiting_customer"
+
+    # Second turn: the customer types their email. That alone identifies nobody: a code goes to the email
+    classifier.get_llm().outputs[TicketClassification] = classification(
+        issue_type="reservation", requires_account_action=True, customer_email="bob.stone@granite.com")
+    _scripted_account_agent(monkeypatch)
+    second = process_ticket("It's bob.stone@granite.com", "t-guest", agent=graph)
+    assert second["route"] == "request_info" and second["ticket_status"] == "awaiting_customer"
+    assert not second["customer"]["identified"] and second["actions_taken"] == []
+    assert "6-digit code" in second["final_response"] and "bob.stone@granite.com" in inbox
+    assert inbox["bob.stone@granite.com"] not in json.dumps(second["pending_verification"])  # only an HMAC
+
+    # Third turn: the code. The classifier isn't asked (the request is the one from the email turn)
+    classifier.get_llm().outputs[TicketClassification] = classification(issue_type="other", confidence=0.1)
+    third = process_ticket(inbox["bob.stone@granite.com"], "t-guest", agent=graph)
+    assert third["customer"]["name"] == "Bob Stone"
+    assert third["route"] == "account_agent" and third["classification"]["issue_type"] == "reservation"
+    assert [a["tool"] for a in third["actions_taken"]] == ["get_my_reservations"]
+    assert third["pending_verification"] is None
     # the whole conversation is kept in the thread
-    assert len(second["messages"]) == 4
+    assert len(third["messages"]) == 6
     # long-term memory recalled after identification
-    assert any("music" in m for m in second["memories"])
-    assert second["prior_tickets"][0]["ticket_id"] == "past-bob-login"
+    assert any("music" in m for m in third["memories"])
+    assert third["prior_tickets"][0]["ticket_id"] == "past-bob-login"
+
+
+def test_a_typed_email_reveals_nothing_without_the_code(run, monkeypatch, inbox):
+    """Typing someone's email used to be enough to read and cancel their bookings."""
+    _scripted_account_agent(monkeypatch)
+    replies = {}
+    for email in ("bob.stone@granite.com", "nobody@example.com"):
+        graph = run(classification=classification(issue_type="reservation", requires_account_action=True,
+                                                   customer_email=email))
+        state = process_ticket(f"My email is {email}, show my bookings", f"t-{email}", agent=graph)
+        assert state["route"] == "request_info" and not state["customer"]["identified"]
+        replies[email] = state["final_response"].replace(email, "<email>")
+        # A wrong guess identifies nobody either
+        guess = process_ticket("123456" if inbox.get(email) != "123456" else "654321", f"t-{email}", agent=graph)
+        assert guess["route"] == "request_info" and not guess["customer"]["identified"]
+        assert guess["actions_taken"] == [] and "doesn't match" in guess["final_response"]
+    # The same reply whether or not the email has an account; only the customer's gets a code
+    assert replies["bob.stone@granite.com"] == replies["nobody@example.com"]
+    assert set(inbox) == {"bob.stone@granite.com"}
+
+
+def test_too_many_wrong_codes_burn_the_code(run, monkeypatch, inbox):
+    from agentic import verification
+    monkeypatch.setattr(verification, "CODE_MAX_ATTEMPTS", 2)
+    graph = run(classification=classification(issue_type="reservation", requires_account_action=True,
+                                               customer_email="bob.stone@granite.com"))
+    process_ticket("I'm bob.stone@granite.com, cancel my booking", "t-burn", agent=graph)
+    code = inbox["bob.stone@granite.com"]
+    wrong = "000000" if code != "000000" else "111111"
+    process_ticket(wrong, "t-burn", agent=graph)
+    burnt = process_ticket(wrong, "t-burn", agent=graph)
+    assert "no longer works" in burnt["final_response"]
+    late = process_ticket(code, "t-burn", agent=graph)   # the right code, too late
+    assert not late["customer"]["identified"]
+
+
+def test_an_expired_code_is_refused(run, monkeypatch, inbox):
+    from datetime import timedelta
+    from agentic import verification
+    monkeypatch.setattr(verification, "CODE_TTL", timedelta(seconds=-1))
+    graph = run(classification=classification(issue_type="reservation", requires_account_action=True,
+                                               customer_email="bob.stone@granite.com"))
+    process_ticket("I'm bob.stone@granite.com, cancel my booking", "t-expired", agent=graph)
+    state = process_ticket(inbox["bob.stone@granite.com"], "t-expired", agent=graph)
+    assert not state["customer"]["identified"] and "expired" in state["final_response"]
+
+
+def test_too_many_codes_on_a_ticket_go_to_a_human(run, monkeypatch, inbox):
+    from agentic import verification
+    monkeypatch.setattr(verification, "RESEND_SECONDS", 0)
+    monkeypatch.setattr(verification, "MAX_CODES_PER_TICKET", 2)
+    graph = run(classification=classification(issue_type="reservation", requires_account_action=True,
+                                               customer_email="bob.stone@granite.com"))
+    for _ in range(2):
+        assert process_ticket("I'm bob.stone@granite.com", "t-many", agent=graph)["route"] == "request_info"
+    state = process_ticket("I'm bob.stone@granite.com", "t-many", agent=graph)
+    assert state["route"] == "escalation_agent" and "identity verification" in state["route_reason"]
+    assert not state["customer"]["identified"]
+
+
+def test_a_trusted_channel_still_identifies_by_metadata(run, monkeypatch, inbox):
+    """A channel's API key vouches for the customer in the metadata: no code needed."""
+    graph = run(classification=classification(issue_type="reservation", requires_account_action=True))
+    _scripted_account_agent(monkeypatch, "Here are your reservations.")
+    state = process_ticket("Show my reservations", "t-channel", {"email": "bob.stone@granite.com"}, agent=graph)
+    assert state["customer"]["identified"] and state["route"] == "account_agent" and inbox == {}
 
 
 class ToolCallingLLM(GenericFakeChatModel):

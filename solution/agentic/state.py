@@ -119,3 +119,9 @@ class UdaHubState(TypedDict, total=False):
     escalation: Optional[dict]
     final_response: str
     trace: list[str]
+
+    # Verifying an email a guest typed (agentic/verification.py). Kept across turns by the checkpointer;
+    # holds an HMAC of the code, never the code.
+    pending_verification: Optional[dict]
+    info_request: Optional[str]        # what request_info asks for this turn (code_sent, code_wrong, ...)
+    info_request_email: Optional[str]
