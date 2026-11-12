@@ -13,8 +13,9 @@ LLM can never act on another customer's account. The tools are rebuilt on every 
 | Tool | What it does | Rules enforced |
 |---|---|---|
 | `get_my_account` | Profile, blocked status, subscription, and quota used and remaining this month | |
-| `get_my_reservations` | The customer's reservations: id, status, experience and date | |
-| `find_experiences` | Upcoming experiences with free slots, by keyword and location. Each result says whether the customer has `already_booked` it, so they aren't recommended something they already have. | |
+| `get_my_reservations` | The customer's reservations: id, status, experience and date. Each is marked `booked_by` the customer being served, after the agent once said one was a friend's. | |
+| `find_experiences` | Upcoming experiences with free slots, by keyword and location. Each result says whether the customer has `already_booked` it and whether they `can_book` it now, with `cannot_book_because` when not, so the agent never offers a booking that would fail. | `booking_blocker()` applies the same rules, in the same order, as `reserve_experience()`. A test tries every demo customer against every experience and checks they agree. |
+| `recommend_experiences` | Experiences the customer can book that fit their stored preferences, each with the preference it fits. When none fit, it says so and offers up to three alternatives labelled as not matching. | Only bookable experiences are candidates. The match is one structured question to the model (`recommendations.py`); answers naming an experience or a preference that isn't in the list are dropped. |
 | `book_experience` | Reserves an experience | The id must have come from `find_experiences` or `get_my_reservations` in this turn. The account must not be blocked and the subscription must be active. Premium experiences need the premium tier. There must be free slots and quota left. No double booking. |
 | `cancel_my_reservation` | Cancels a reservation and returns the credit if it's at least 24h before the event | The id must have come from `get_my_reservations` in this turn, or from a booking made in this turn. The reservation must belong to the customer and still be active. |
 | `change_subscription` | Pauses, resumes or cancels the subscription | Only valid state changes are allowed. Blocked accounts can't make changes. |
@@ -40,6 +41,14 @@ Notebook 03's "Support tools on sample operations" cell runs each tool on sample
 The underlying functions (`get_customer_profile`, `find_customer_by_email`, `list_reservations`,
 `search_experiences`, `reserve_experience`, `cancel_reservation`, `manage_subscription`) are also used directly
 by the supervisor and the memory nodes.
+
+## `recommendations.py`: matching experiences to preferences
+
+`match_preferences()` asks the model which of the candidate experiences clearly fit one of the customer's stored
+preferences, quoting the preference exactly. Code checks every answer against the candidates and preferences
+it sent. The match is asked on its own because, inside the agent loop, the model padded recommendations with
+experiences that didn't fit, and embedding similarity couldn't tell them apart (Christ the Redeemer scores 0.47
+against "music and dance in Rio", the Carnival tour 0.46).
 
 ## `knowledge_tools.py`: RAG over the knowledge base
 

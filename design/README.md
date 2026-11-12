@@ -57,8 +57,8 @@ Why Supervisor rather than the alternatives:
 | `classifier` | LLM, structured output | Produces a `TicketClassification` with issue type (11 categories), urgency, sentiment, whether account action is needed, whether a human was requested, any email mentioned, language and confidence. Recommendations and availability questions count as account work, because they need the real catalog. |
 | `supervisor` | deterministic | Links a guest ticket to a customer when the classifier found their email. It then applies the routing rules below. The LLM classifies, but the routing itself stays auditable and testable code. |
 | `knowledge_agent` | RAG | Retrieves the top 3 KB articles for the account. With no relevant article above the score threshold, it produces no draft and the ticket escalates. Otherwise it answers grounded in those articles, in the customer's language. |
-| `account_agent` | ReAct agent (`create_agent`) | Uses CultPass tools **bound to the current customer**: account, reservations, experience search, booking, cancellation, subscription changes, refund requests and KB search. Booking and cancellation only accept ids that a lookup returned in the same turn. It recommends real experiences from the catalog, and asks a clarifying question when the request is ambiguous. |
-| `quality_gate` | LLM, structured output, plus rules | Scores the draft against the evidence (articles or tool results) for confidence, grounding, whether a human is needed and whether it waits on the customer. `should_escalate` then decides deterministically. |
+| `account_agent` | ReAct agent (`create_agent`) | Uses CultPass tools **bound to the current customer**: account, reservations, experience search, booking, cancellation, subscription changes, refund requests and KB search. Booking and cancellation only accept ids that a lookup returned in the same turn. It recommends with `recommend_experiences`, which returns only bookable experiences that fit the customer's stored preferences, and asks a clarifying question when the request is ambiguous. Ids in its draft are checked against the ids the tools returned. |
+| `quality_gate` | LLM, structured output, plus rules | Scores the draft against the evidence (the customer's account and stored preferences, articles, tool results) for confidence, grounding and whether the evidence answers the question. It reports whether policy requires a human and whether the customer says the steps already failed; code combines those into `needs_human`. A draft with no question mark can't be waiting on the customer. `should_escalate` then decides deterministically. |
 | `approve` | deterministic | Runs when the quality gate passes the draft, and makes the draft the reply. |
 | `escalation_agent` | LLM, structured output | Picks the team and priority, writes a handoff note (stored as a `system` ticket message) and an empathetic reply. It never reveals block reasons and never promises refunds. |
 | `request_info` | deterministic | Asks the customer to identify themselves and keeps the ticket open (`awaiting_customer`). |
@@ -100,7 +100,8 @@ The rules are evaluated in order:
    resolved for it and they wrote again. Applies to login, technical, billing/refund, privacy and complaint issues
    → **escalation** (the documented fix didn't work). Reservations and subscription changes are routine and
    expected to repeat, so they're excluded.
-8. Account data or action needed, customer unknown → **request_info**
+8. Account data or action needed, customer unknown → **request_info**. A guest's question about how reservations,
+   the subscription or billing work, with no account action needed, goes to **knowledge_agent** instead.
 9. Account data or action needed (`reservation`, `subscription`, `billing_refund`, or `requires_account_action`) → **account_agent**. This includes recommendations.
 10. Otherwise → **knowledge_agent**
 
@@ -111,7 +112,9 @@ A blocked customer can still get answers to general questions, such as what a su
 Any of these triggers an escalation:
 
 - a policy-gated tool succeeded (`request_refund`: refunds require support-lead approval)
-- the gate says a human must take over now. Offering escalation only if the documented steps don't work doesn't count.
+- a human must take over now: policy requires one (refund approval, a blocked account, a legal or data-protection
+  issue, identity verification), or the customer says the documented steps already failed. The gate reports
+  these two facts and code combines them. Offering more help if the steps don't work doesn't count.
 - the draft is not grounded in the evidence: any fact, step or suggestion that no article or tool result supports
 - the evidence doesn't answer the question. For example, articles on a related topic were retrieved, but none
   answers what was asked. A necessary clarifying question is exempt.

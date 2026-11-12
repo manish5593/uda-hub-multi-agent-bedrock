@@ -69,8 +69,9 @@ The same workflow, with the same nodes, prompts, tools and rules, runs in two wa
 ![UDA-Hub deployment as microservices](design/deployment.svg)
 
 An evaluation suite ([`solution/evals/`](solution/evals/README.md)) runs 36 labelled tickets against the real model
-and reports routing, outcome, tool and answer accuracy: **95 of 108 runs pass every check (88%)**, and every
-policy, safety, language and knowledge-gap case passes in every run ([results](#evaluation-results)). GitHub
+and reports routing, outcome, tool and answer accuracy: **108 of 108 runs passed every check (100%)** in the
+latest evaluation, up from 88% at the first ([results](#evaluation-results)). Earlier runs scored 94–99%, so
+expect an occasional miss. GitHub
 Actions runs the offline tests on every pull request.
 
 ## Repository layout
@@ -309,25 +310,28 @@ The model's wording varies from run to run, but the routes and outcomes above we
 
 ### Evaluation results
 
-The evaluation suite ran 36 labelled tickets, 3 times each, with `gpt-4o-mini` running the agents and `gpt-4o`
-as the judge. **95 of 108 runs passed every check (88%)**, with a median of 4.4 seconds per message.
+The evaluation suite runs 36 labelled tickets, 3 times each, with `gpt-4o-mini` running the agents and `gpt-4o`
+as the judge. In the latest evaluation, **108 of 108 runs passed every check (100%)**, with a median of 4.9
+seconds per message. The first scored 95 of 108 (88%).
 
-| Category | Runs passed | | Check | Rate |
-|---|---|---|---|---|
-| Policy | 18 / 18 | | Issue type | 100% |
-| Safety | 9 / 9 | | Escalation team | 100% |
-| Not covered by an article | 9 / 9 | | Route | 94% |
-| Routing edge cases | 6 / 6 | | Outcome | 94% |
-| Portuguese and Spanish | 6 / 6 | | Tool calls | 93% |
-| Account actions | 26 / 33 | | Faithfulness (judge) | 93% |
-| Knowledge questions | 21 / 27 | | Key points (judge) | 90% |
+| Category | First | Latest | | Check | First | Latest |
+|---|---|---|---|---|---|---|
+| Policy | 18 / 18 | 18 / 18 | | Issue type | 100% | 100% |
+| Safety | 9 / 9 | 9 / 9 | | Escalation team | 100% | 100% |
+| Not covered by an article | 9 / 9 | 9 / 9 | | Route | 94% | 100% |
+| Routing edge cases | 6 / 6 | 6 / 6 | | Outcome | 94% | 100% |
+| Portuguese and Spanish | 6 / 6 | 6 / 6 | | Tool calls | 93% | 100% |
+| Account actions | 26 / 33 | 33 / 33 | | Faithfulness (judge) | 93% | 100% |
+| Knowledge questions | 21 / 27 | 27 / 27 | | Key points (judge) | 90% | 100% |
 
-The rules enforced in code held in every run. What fails is the model's judgment in two places: a guest asking
-whether a reservation can be transferred, or why a QR code won't scan, is asked for their email instead of
-being answered from the article; and the account agent answers "how many experiences do I have left" without
-looking the account up, which the quality gate catches and escalates. With `gpt-4o-mini` judging its own
-replies, the same suite scored 69%, mostly from faithfulness failures on correct answers. The details are in
-[`report.md`](report.md#evaluation).
+The rules enforced in code held in every run. Each evaluation in between pointed to the next fix: guests'
+how-to questions go to the knowledge agent instead of being asked for an email; the quality gate sees the
+account details the agent was given; code decides whether a reply waits for the customer and whether a human
+is needed; search results say whether the customer can book each experience; and a `recommend_experiences`
+tool suggests only what fits the customer's stored preferences. Four changes were to the evaluation itself,
+each checked against the evidence first. It is one run: the ones before it each missed one or two, so expect
+98–100% when it is repeated. With `gpt-4o-mini` judging its own replies, the first evaluation scored 69%,
+mostly from faithfulness failures on correct answers. The details are in [`report.md`](report.md#evaluation).
 
 ## Project Instructions
 

@@ -139,11 +139,13 @@ python -m evals.run            # needs the model settings in .env; 3 runs per ca
 See [`evals/README.md`](evals/README.md) for the checks, the case format, and the options.
 
 **Results:** with `gpt-4o-mini` running the agents and `gpt-4o` judging (`UDAHUB_EVAL_JUDGE_MODEL=gpt-4o`),
-**95 of 108 runs passed every check (88%)**. Every policy, safety, language, routing and knowledge-gap case passed
-in every run. The failures are two how-to questions from a guest that get a request for their email instead of
-the article's answer, and the account agent answering a quota question without looking the account up, which
-the quality gate escalates. With `gpt-4o-mini` as its own judge the score was 69%, mostly from faithfulness
-failures on correct answers. The full results are in [`../report.md`](../report.md#evaluation).
+**108 of 108 runs passed every check (100%)** in the latest evaluation, up from 95 (88%) at the first. The runs
+in between scored 94–99%, each missing one or two in different cases, so expect an occasional miss. The fixes
+in between: guests' how-to questions are answered from the knowledge base, the quality gate sees the account
+details the agent was given, code decides whether a reply waits for the customer and whether a human is needed,
+search results say whether the customer can book each experience, and `recommend_experiences` suggests only
+what fits their stored preferences. With `gpt-4o-mini` as its own judge the first evaluation scored 69%, mostly
+from faithfulness failures on correct answers. The full results are in [`../report.md`](../report.md#evaluation).
 
 ## Folder guide
 

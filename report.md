@@ -16,8 +16,8 @@ sessions.
 | **Data** | Two SQLite databases: `cultpass.db` (customers, subscriptions, experiences, reservations) and `udahub.db` (tickets, messages, 18 knowledge articles, long-term memory). As microservices, the same tables in Postgres, one database per service, with the knowledge embeddings stored in pgvector |
 | **Deployment** | `service/`: an API gateway and five services (agent, CultPass, tickets, knowledge, auth) with Postgres and pgvector, Alembic migrations, Docker Compose, customer sign-up and login with JWTs, Prometheus with a Grafana dashboard, optional Langfuse tracing, and a web chat for demos (section 4). Run end to end with the real model |
 | **Demonstration** | `solution/03_agentic_app.ipynb`, committed with the outputs of a real-model run: 13 scenarios, 5 edge cases, and demos of routing, retrieval, tools, memory and logs |
-| **Tests** | 74 offline tests in `solution/tests` (24 unit, 20 end-to-end through the graph with a scripted model, 26 for the evaluation suite, 4 for tracing) and 108 in `service/tests` (services, customer logins and tokens, the full HTTP flow, migrations on SQLite and Postgres, and the pgvector index on Postgres). No API key needed; GitHub Actions runs them on every pull request |
-| **Evaluation** | `solution/evals`: 36 labelled tickets, 3 runs each, against the real model, scored in code and by an LLM judge. **95 of 108 runs (88%) pass every check**; policy, safety, language, routing and knowledge-gap cases pass in every run (section 5) |
+| **Tests** | 85 offline tests in `solution/tests` (35 unit, 20 end-to-end through the graph with a scripted model, 26 for the evaluation suite, 4 for tracing) and 108 in `service/tests` (services, customer logins and tokens, the full HTTP flow, migrations on SQLite and Postgres, and the pgvector index on Postgres). No API key needed; GitHub Actions runs them on every pull request |
+| **Evaluation** | `solution/evals`: 36 labelled tickets, 3 runs each, against the real model, scored in code and by an LLM judge. **108 of 108 runs (100%) passed every check** in the latest evaluation, up from 95 (88%) at the first one; the runs in between scored 94–99%, so expect a run to miss one or two (section 5) |
 | **Environment** | Python 3.11, LangGraph 1.2.20, LangChain 1.4.9, langchain-openai 1.7.4, langchain-aws 1.9.2, SQLAlchemy 2.1, FastAPI 0.162, Postgres 16 with pgvector 0.8.7, PyJWT 2.15, bcrypt 5.0, Langfuse 4.78 (SDK 5.2) |
 
 The main lesson matched what I'd learned building earlier agent systems: **the LLM proposes, code decides.**
@@ -238,41 +238,64 @@ model's wording varies.
 
 ### Evaluation
 
-The evaluation suite ran 36 labelled tickets, 3 times each (108 runs), with `gpt-4o-mini` running the agents
-and `gpt-4o` as the judge. **95 of 108 runs passed every check (88%)**, with a median of 4.4 seconds per message.
+The evaluation suite runs 36 labelled tickets, 3 times each (108 runs), with `gpt-4o-mini` running the agents
+and `gpt-4o` as the judge. In the latest evaluation, **108 of 108 runs passed every check (100%)**, with a median
+of 4.9 seconds per message.
 
-| Check | Passed | Rate |
+| Check | First evaluation | Latest |
 |---|---|---|
-| Issue type | 33 / 33 | 100% |
-| Route | 102 / 108 | 94% |
-| Outcome | 102 / 108 | 94% |
-| Escalation team | 18 / 18 | 100% |
-| Tool calls | 39 / 42 | 93% |
-| Forbidden text | 3 / 3 | 100% |
-| Key points (judge) | 119 / 132 | 90% |
-| Faithfulness (judge) | 54 / 58 | 93% |
+| Issue type | 33 / 33 (100%) | 33 / 33 (100%) |
+| Route | 102 / 108 (94%) | 108 / 108 (100%) |
+| Outcome | 102 / 108 (94%) | 108 / 108 (100%) |
+| Escalation team | 18 / 18 (100%) | 18 / 18 (100%) |
+| Tool calls | 39 / 42 (93%) | 39 / 39 (100%) |
+| Forbidden text | 3 / 3 (100%) | 3 / 3 (100%) |
+| Key points (judge) | 119 / 132 (90%) | 135 / 135 (100%) |
+| Faithfulness (judge) | 54 / 58 (93%) | 66 / 66 (100%) |
+| **Runs that passed every check** | **95 / 108 (88%)** | **108 / 108 (100%)** |
 
-| Category | Runs passed |
-|---|---|
-| Policy (refunds, blocked accounts, privacy, human requests, repeat problems) | 18 / 18 |
-| Safety (prompt injection, another customer's data, venue incident) | 9 / 9 |
-| Questions no article answers (escalated, not invented) | 9 / 9 |
-| Routing edge cases | 6 / 6 |
-| Portuguese and Spanish | 6 / 6 |
-| Account actions | 26 / 33 |
-| Knowledge questions | 21 / 27 |
+| Category | First evaluation | Latest |
+|---|---|---|
+| Policy (refunds, blocked accounts, privacy, human requests, repeat problems) | 18 / 18 | 18 / 18 |
+| Safety (prompt injection, another customer's data, venue incident) | 9 / 9 | 9 / 9 |
+| Questions no article answers (escalated, not invented) | 9 / 9 | 9 / 9 |
+| Routing edge cases | 6 / 6 | 6 / 6 |
+| Portuguese and Spanish | 6 / 6 | 6 / 6 |
+| Account actions | 26 / 33 | 33 / 33 |
+| Knowledge questions | 21 / 27 | 27 / 27 |
 
-Every rule that is enforced in code held in every run. The failures are the model's judgments, in three places:
+Some totals changed with the cases: the quota case no longer expects a tool call, and the recommendation case
+gained a key point. Faithfulness is judged whenever an agent's draft is sent, so more replies were judged once
+fewer were escalated.
 
-- **Two how-to questions were treated as account requests** (0 of 3 each). A guest asking whether a reservation
-  can be transferred, or why a QR code won't scan, was asked for their email instead of being answered from the
-  article that covers it. The classifier marks them as needing account action, and the routing then needs an
-  identified customer.
-- **"How many experiences do I have left this month?" was never answered** (0 of 3). The account agent drafted
-  a number without calling `get_my_account`. The quality gate saw that the draft wasn't backed by a tool result
-  and escalated every time, so no customer got an unsupported answer, but none got the number either.
-- **Four replies stated details the judge couldn't find in the evidence**, all in booking replies, such as the
-  date of a booking the customer already had.
+Every rule that is enforced in code held in every run of both. The first evaluation's failures were the model's
+judgments: guests asking how-to questions were asked for their email instead of answered, a quota question was
+answered without the evidence the gate wanted and escalated, and booking replies stated details the judge
+couldn't find. Each evaluation in between pointed to the next problem, and section 6 lists them with their fixes:
+
+| Evaluation | Runs passed | What changed before it |
+|---|---|---|
+| 1 | 95 / 108 (88%) | |
+| 2 | 102 / 108 (94%) | Guests' how-to questions go to the knowledge agent; the gate sees the customer's account |
+| 3 | 102 / 108 (94%) | A reply without a question doesn't wait for the customer; the gate and judge see stored preferences |
+| 4 | 106 / 108 (98%) | Search results say whether the customer `can_book` each experience |
+| 5 | 106 / 108 (98%) | Code decides whether a human is needed; reservations say whose they are |
+| 6 | 107 / 108 (99%) | `recommend_experiences`; ids in the draft are checked |
+| 7 | 108 / 108 (100%) | The judge counts an article's suggested phrasing as evidence |
+
+Three caveats about the 100%:
+
+- **It is one evaluation.** The model's answers vary, and the runs before it each missed one or two in
+  different cases. Expect 98–100% when it is repeated.
+- **Four of the changes were to the evaluation, not the agents.** Two loosened it: the judge doesn't count
+  hedged suggestions ("you might enjoy") or an article's own suggested phrasing as unsupported claims. One
+  tightened it: the recommendation case now checks that nothing is said to fit Bob's interests unless it does.
+  And the quota case no longer requires a `get_my_account` call, because code already loads the account for every
+  message and gives it to the agent; its key point still checks the number. Each change was checked against the
+  articles and tool results first. Under the old quota expectation, the latest evaluation would be 105 of 108
+  (97%).
+- **A perfect run can't show that the judge would still catch a real error.** The earlier runs, with the same
+  judge, did catch real ones: padded recommendations, and a reservation described as someone else's.
 
 The first run used `gpt-4o-mini` as its own judge and scored 69%. Its faithfulness check failed 24 of 55 replies,
 many of them correct: it flagged "your subscription has been paused" right after `change_subscription` had
@@ -320,9 +343,24 @@ Running the full stack and the evaluation with a real model for the first time, 
 | Problem found | Fix |
 |---|---|
 | **The default Bedrock model had been retired.** Every Converse call to Claude 3.5 Haiku failed with "This model version has reached the end of its life". | The default and the examples now use Claude Haiku 4.5, the newest model the account could call. Bedrock model ids need checking against the account's inference profiles, not just the documentation. |
-| **The judge graded its own model, and harshly.** With `gpt-4o-mini` judging `gpt-4o-mini`, 24 of 55 faithfulness checks failed, many on claims a successful tool call had just confirmed, so the headline was 69%. | The evaluation runs with `UDAHUB_EVAL_JUDGE_MODEL=gpt-4o`, which the suite already supported: 88%, with faithfulness at 93%. Each judge failure was checked against the tool results before trusting either number. |
+| **The judge graded its own model, and harshly.** With `gpt-4o-mini` judging `gpt-4o-mini`, 24 of 55 faithfulness checks failed, many on claims a successful tool call had just confirmed, so the headline was 69%. | The evaluation runs with `UDAHUB_EVAL_JUDGE_MODEL=gpt-4o`, which the suite already supported: 88% at the time, with faithfulness at 93%. Each judge failure was checked against the tool results before trusting either number. |
 | **Resetting the demo data emptied the pgvector index under a running service.** `seed --reset` deletes and reloads the articles, the cascade deleted their embeddings, and every knowledge search came back empty, so every how-to question would have escalated. The in-memory index had never had this problem. | A search that finds no rows for an account with articles re-embeds them first: the query has no threshold, so no rows always means a missing index. A test reloads the articles under a live retriever. Found by resetting the data after the end-to-end run, not by the unit tests. |
 | **The demo data went out of date.** The committed experiences were dated 10–16 November, so by the day of a demo, reservations were in the past and few experiences could be booked. | `01_external_db_setup.ipynb` rebuilt the database with dates 12–18 November. The evaluation and tests are unaffected: they move the dates to today on every run. |
+
+Raising the evaluation from 88% to 100% found these. Each fix was checked with a targeted run of the failing
+cases, then the full evaluation:
+
+| Problem found | Fix |
+|---|---|
+| **Guests' how-to questions were asked for an email.** "Can I transfer my reservation?" or "my QR code won't scan" from a guest was classified as needing account action, and routing then asks an unknown customer who they are (0 of 3 runs each). | Routing sends a guest's reservation, subscription or billing question to the knowledge agent unless the classifier says it needs account data. The `requires_account_action` description now excludes how-it-works and troubleshooting questions, and a QR code that won't scan is `technical`. A guest asking for an account action is still asked for their email. |
+| **A correct quota answer was escalated.** The account agent answered "how many experiences do I have left?" from the account details it is given at the start, without calling a tool, so the gate saw no evidence for the number (0 of 3 runs). | The gate is given the same account details, loaded by code for every message, so an answer taken from them is grounded. |
+| **Answered tickets were left open.** The gate marked "let me know if..." offers as waiting for the customer, even after the field's description said they weren't. | Code decides: a draft with no `?`, `¿` or `？` can't be waiting for an answer. |
+| **The gate escalated troubleshooting answers again.** Asked as one judgment whether a human is needed, it read "contact us if it persists" as needing one now. Section 6's earlier fix, the field description, wasn't enough. | The gate reports two facts instead, whether policy requires a human and whether the customer says the steps already failed, and code combines them. |
+| **The agent offered bookings the customer couldn't make**, such as a premium experience on a basic plan, and wrote "I will book it for you" without calling the tool. | Search results carry `can_book` and `cannot_book_because`, from one function that applies the same rules as booking. A test tries every demo customer against every experience and checks the two always agree. |
+| **The agent told Cathy her own reservation was her friend Bob's.** | Reservations are labelled with who booked them (the customer being served), and the gate treats claims about anyone else's account as ungrounded. |
+| **Recommendations were padded.** When nothing new matched Bob's taste for music and dance, the agent added a sightseeing tour that "fits your interests". Embedding similarity couldn't separate them either: Christ the Redeemer scores 0.47 against "music and dance in Rio", the Carnival tour 0.46. | A `recommend_experiences` tool. Code passes only experiences the customer can book, and asks the model one narrow structured question: which of them clearly fit a stored preference, quoted exactly. Answers that name an unknown experience or preference are dropped. When nothing fits, it says so and offers alternatives labelled as not matching. |
+| **A booking reply gave a wrong reservation id.** The model copied `23e89` for a 6-character id. | Every id-like token in the account agent's draft must be one the tools returned. A wrong one is corrected when the turn made exactly one booking. |
+| **The judge flagged correct replies.** It counted "you might enjoy" as a claim, didn't know what `already_booked` meant, and flagged sentences an article gives as its suggested phrasing. | The judge's prompt covers each, and it sees the customer's stored preferences. Each flag was checked against the evidence first: every one was a correct reply. |
 
 ## 7. Lessons
 
@@ -342,25 +380,31 @@ Running the full stack and the evaluation with a real model for the first time, 
   answers often enough to hide where the real problems were.
 - **A derived index has to notice when its source changes underneath it.** Moving the embeddings from memory
   into the database made them shared and durable, but also exposed them to the data reset.
+- **Give the checkers the evidence the agent had.** The quality gate and the judge both escalated or failed
+  correct answers taken from the account details and preferences the agent was given but they weren't.
+- **Narrow questions get reliable answers.** "Which of these fits a preference?" asked alone, about only the
+  experiences the customer can book, gave consistent answers where the same choice inside a long agent loop
+  didn't.
+- **Read a failure before fixing it.** Several evaluation failures were the judge's mistakes, not the agent's.
+  Fixing the agent for them would have made it worse.
 - **Optional features must be off without configuration.** Tracing and the extra Compose profiles change nothing
   unless they are configured, so the notebooks, the tests and the default stack keep working.
 
 ## 8. Limitations and next steps
 
 - **Wording varies between runs.** Routes and policy decisions are fixed by code, but reply wording and some
-  judgments (such as how many recommendations to give) vary.
+  judgments vary. The latest evaluation passed every run, but the ones before it each missed one or two
+  in different cases, and a demo run once listed a Carnival history tour as an outdoor activity.
 - **Short-term memory is in process in the notebooks.** `MemorySaver` is lost on restart, and the conversation is
   rebuilt from the database. The agent service keeps the full run state in Postgres (`PostgresSaver`).
-- **Search is literal.** Experience search matches words, not meanings. Embedding the catalog would let a query
-  like "outdoor activities" work directly.
+- **Search is literal.** `find_experiences` matches words, not meanings. Recommendations don't depend on it:
+  `recommend_experiences` asks the model which bookable experiences fit, at the cost of one more model call. With
+  a large catalog, the candidates would need narrowing first.
 - **Memory filters are pattern-based.** They block every slip seen in testing, but a new kind could still get
   through. An evaluation set of conversations and expected memories would measure it.
-- **Some how-to questions are routed as account requests.** Asking whether a reservation can be transferred, or
-  why a QR code won't scan, gets a request for the guest's email instead of the article's answer (0 of 3 runs
-  each). A routing rule for questions the knowledge base covers, or clearer classifier guidance, is the next fix.
-- **The account agent sometimes answers without looking the account up.** The quality gate catches it and
-  escalates, so the customer never gets an unsupported answer, but "how many experiences do I have left" is
-  never answered (0 of 3 runs). Requiring a lookup before an account answer would close it.
+- **Some safeguards are deliberately simple.** Whether a draft waits for the customer is decided by its question
+  marks, and a wrong id is corrected only when the turn made exactly one booking; otherwise it is left for the
+  gate. Both cover every case seen so far.
 - **The evaluation doesn't check long-term memory** yet: what gets written to `customer_memory`.
 - **Bedrock and SageMaker haven't completed a full run.** Bedrock credentials and model ids are verified (Titan
   embeddings and Claude Haiku 4.5 answered test calls), but a new AWS account must be verified and approved for
