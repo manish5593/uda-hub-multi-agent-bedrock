@@ -385,3 +385,39 @@ def test_sagemaker_deploy_creates_model_config_and_endpoint(monkeypatch):
     assert model["PrimaryContainer"]["Environment"] == {"HF_MODEL_ID": "BAAI/bge-small-en-v1.5"}
     assert calls[1][1]["ProductionVariants"][0]["ModelName"] == "kb-model"
     assert calls[2][1] == {"EndpointName": "kb", "EndpointConfigName": "kb-config"}
+
+
+def test_booking_blocker_agrees_with_reserve_experience(tmp_path, monkeypatch):
+    """can_book in search results must say exactly what a booking would answer, for every demo customer and
+    experience. Each attempt runs on fresh databases, so one booking can't change the next answer."""
+    from agentic import config
+    from agentic.demo_data import copy_demo_databases
+    from agentic.tools import cultpass_tools as ct
+
+    users = [u["user_id"] for u in map(ct.get_customer_profile, ["a4ab87", "f556c0", "88382b", "888fb2",
+                                                                    "f1f10d", "e6376d"])]
+    experiences = [e["experience_id"] for e in ct.search_experiences(only_available=False)]
+    checked = {True: 0, False: 0}
+    for user_id in users:
+        for experience_id in experiences:
+            udahub_db, cultpass_db = copy_demo_databases(tmp_path / f"{user_id}-{experience_id}")
+            monkeypatch.setattr(config, "UDAHUB_DB_PATH", udahub_db)
+            monkeypatch.setattr(config, "CULTPASS_DB_PATH", cultpass_db)
+            exp = next(e for e in ct.search_experiences(only_available=False) if e["experience_id"] == experience_id)
+            booked = any(r["experience_id"] == experience_id and r["status"] == "reserved"
+                         for r in ct.list_reservations(user_id))
+            blocker = ct.booking_blocker(ct.get_customer_profile(user_id), exp, booked)
+            result = ct.reserve_experience(user_id, experience_id)
+            assert result["success"] == (blocker is None), (user_id, exp["title"], blocker, result)
+            checked[result["success"]] += 1
+    # The demo data covers both answers (blocked, basic tier, quota and duplicates on one side)
+    assert checked[True] > 0 and checked[False] > 0
+
+
+def test_search_results_say_whether_the_customer_can_book():
+    from agentic.tools import cultpass_tools as ct
+    cathy = {t.name: t for t in ct.build_account_tools("88382b", "t-can-book")}  # basic tier
+    results = cathy["find_experiences"].invoke({})
+    premium = [e for e in results if e["is_premium"]]
+    assert premium and all(not e["can_book"] and "premium" in e["cannot_book_because"] for e in premium)
+    assert any(e["can_book"] and "cannot_book_because" not in e for e in results)

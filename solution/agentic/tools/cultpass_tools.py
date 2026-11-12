@@ -144,6 +144,28 @@ def search_experiences(query: str = "", location: str = "", only_available: bool
         return results
 
 
+def booking_blocker(profile: Optional[dict], experience: dict, already_booked: bool) -> Optional[str]:
+    """Why this customer can't book this experience, or None if they can. The same rules, in the same
+    order, as reserve_experience, so search results can say up front what a booking would answer
+    (test_booking_blocker_agrees_with_reserve_experience checks they never disagree)."""
+    if profile is None:
+        return "Unknown customer."
+    if profile["is_blocked"]:
+        return "Account is blocked; reservations are disabled."
+    sub = profile.get("subscription")
+    if sub is None or sub["status"] != "active":
+        return f"Subscription is not active (status: {sub['status'] if sub else 'none'})."
+    if experience["is_premium"] and sub["tier"] != "premium":
+        return "This is a premium experience and the customer is on the basic tier."
+    if experience["slots_available"] <= 0:
+        return "No slots available for this experience."
+    if sub.get("remaining_this_month", 0) <= 0:
+        return "Monthly quota already used."
+    if already_booked:
+        return "Already reserved by this customer."
+    return None
+
+
 @remote("cultpass")
 def reserve_experience(user_id: str, experience_id: str) -> dict:
     with session_scope(cultpass_engine()) as session:
@@ -266,11 +288,16 @@ def build_account_tools(user_id: str, ticket_id: str) -> list[StructuredTool]:
         return reservations
 
     def find_experiences(query: str = "", location: str = "") -> list[dict]:
-        """Search upcoming experiences with free slots. `query` matches literal words in the title or description, and `location` matches the city or state; leave both empty to list the whole catalog. Each result says whether the customer has `already_booked` it."""
+        """Search upcoming experiences with free slots. `query` matches literal words in the title or description, and `location` matches the city or state; leave both empty to list the whole catalog. Each result says whether the customer has `already_booked` it, and whether they `can_book` it now; when they can't, `cannot_book_because` says why (premium experience on a basic plan, quota used, already booked...)."""
         experiences = search_experiences(query=query, location=location)
         booked = {r["experience_id"] for r in list_reservations(user_id) if r["status"] == "reserved"}
+        profile = get_customer_profile(user_id)
         for exp in experiences:
             exp["already_booked"] = exp["experience_id"] in booked
+            reason = booking_blocker(profile, exp, exp["already_booked"])
+            exp["can_book"] = reason is None
+            if reason:
+                exp["cannot_book_because"] = reason
         for e in experiences:
             seen_experience_ids[e["experience_id"]] = f"{e['title']}, {e['when']}"
         return experiences
