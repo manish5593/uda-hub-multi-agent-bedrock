@@ -61,8 +61,9 @@ Supporting containers:
 Each service has its **own database and its own Postgres role**, which can't connect to any other database.
 They share one Postgres server to keep the demo cheap; moving a database to its own server only changes a URL.
 
-Only the agent and knowledge services get model credentials (`llm.env`), and only the agent can write to
-CultPass. Internal services accept a request only with the shared `INTERNAL_API_TOKEN`.
+All settings live in one `service/.env`, but each service receives only what it needs: model credentials go
+to the agent and knowledge services, email settings to the auth and agent services, and only the agent can
+write to CultPass. Internal services accept a request only with the shared `INTERNAL_API_TOKEN`.
 
 ### The agents in the agent service
 
@@ -116,8 +117,7 @@ What the services add:
 Requires Docker with Compose v2. From `service/`:
 
 ```bash
-cp .env.example .env          # API keys, internal token, database passwords
-cp llm.env.example llm.env    # OpenAI key, or Bedrock / SageMaker settings
+cp .env.example .env    # API keys, internal token, database passwords, model settings, email
 docker compose up --build
 ```
 
@@ -384,7 +384,9 @@ UDAHUB_TEST_POSTGRES_URL=postgresql+psycopg://postgres:<password>@localhost:5432
 | `AGENT_STATE_DB_URL` | agent | Postgres URL of the checkpointer; without it, conversations live in memory |
 | `UDAHUB_VECTOR_STORE` | knowledge | `pgvector` (the default in docker-compose): article embeddings in the knowledge database. `memory`: rebuilt in memory on every start, as in the notebooks |
 | `UDAHUB_SERVICE_TIMEOUT` | agent | Seconds per internal call (default 15) |
-| Model settings (`llm.env`) | agent, knowledge | As in `solution/.env.example` |
+| Model settings: `UDAHUB_LLM_PROVIDER`, `OPENAI_API_KEY`, `UDAHUB_CHAT_MODEL`, `UDAHUB_EMBEDDING_*`, `UDAHUB_RAG_MIN_SCORE` | agent, knowledge | As in `solution/.env.example`; blank ones use the defaults in `agentic/config.py` |
+| `UDAHUB_EMAIL_PROVIDER`, `UDAHUB_EMAIL_FROM`, `UDAHUB_EMAIL_LOG_FALLBACK` | auth, agent | How one-time codes are delivered: `log` (default) writes them to the service log; `ses` emails them with Amazon SES from the verified sender, and never logs them. With the fallback on, a failed email is logged so a demo can go on |
+| `AWS_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | agent, knowledge, auth | For Bedrock (agent, knowledge) and SES (auth, agent) |
 | `GRAFANA_ADMIN_PASSWORD` | grafana | Password of Grafana's `admin` user (default `admin`) |
 | `JWT_SECRET_KEY` | auth, gateway | Signs (auth) and verifies (gateway) customer access tokens; at least 32 characters. Without it the gateway accepts API keys only |
 | `JWT_TTL_MINUTES` | auth | How long an access token is valid (default 60) |

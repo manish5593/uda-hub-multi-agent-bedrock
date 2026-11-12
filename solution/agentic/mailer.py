@@ -34,13 +34,13 @@ LABELS = {"sign-up": "Verification code", "login": "Login code", "chat": "Verifi
 
 
 def provider() -> str:
-    return os.getenv("UDAHUB_EMAIL_PROVIDER", "log").strip().lower()
+    return (os.getenv("UDAHUB_EMAIL_PROVIDER") or "log").strip().lower()
 
 
 @lru_cache(maxsize=1)
 def _ses():
     import boto3
-    return boto3.client("sesv2", region_name=os.getenv("AWS_REGION", "us-east-1"))
+    return boto3.client("sesv2", region_name=os.getenv("AWS_REGION") or "us-east-1")
 
 
 def send_code(email: str, code: str, purpose: str = "sign-up") -> bool:
@@ -60,7 +60,7 @@ def send_code(email: str, code: str, purpose: str = "sign-up") -> bool:
             return True
         except Exception as exc:  # noqa: BLE001 - any SES failure falls back or is reported, never crashes a login
             logger.error("Could not email a %s with SES: %s: %s", purpose, type(exc).__name__, str(exc)[:200])
-            if os.getenv("UDAHUB_EMAIL_LOG_FALLBACK", "true").strip().lower() in ("0", "false", "no", "off"):
+            if (os.getenv("UDAHUB_EMAIL_LOG_FALLBACK") or "true").strip().lower() in ("0", "false", "no", "off"):
                 return False
     elif provider() == "ses":
         logger.error("UDAHUB_EMAIL_PROVIDER=ses but UDAHUB_EMAIL_FROM is not set: logging the code instead")
