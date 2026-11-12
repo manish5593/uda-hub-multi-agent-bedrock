@@ -23,6 +23,7 @@ numbers, account details, or actions the reply says were taken. The evidence is 
 Do not count greetings, empathy, offers to help further, questions to the customer, or hedged suggestions
 such as "you might enjoy" as claims.
 A claim the evidence contradicts is unsupported.
+Everything in a knowledge base article is evidence, its "Suggested phrasing" included: the agent is told to use it.
 In tool results, "already_booked": true on an experience means this customer has booked it, so a reply saying
 they already booked it (with that experience's date) is supported."""
 
