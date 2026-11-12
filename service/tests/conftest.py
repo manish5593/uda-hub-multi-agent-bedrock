@@ -67,7 +67,7 @@ def codes(monkeypatch):
     """Verification codes the auth service 'emails', by address."""
     from service.auth_service import main
     sent = {}
-    monkeypatch.setattr(main, "deliver_code", lambda email, code: sent.__setitem__(email, code))
+    monkeypatch.setattr(main, "deliver_code", lambda email, code, purpose="sign-up": sent.__setitem__(email, code))
     return sent
 
 

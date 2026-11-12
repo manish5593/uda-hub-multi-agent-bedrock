@@ -1,4 +1,4 @@
-"""Tables of the auth database: customer logins and pending email verification codes.
+"""Tables of the auth database: customer logins, and the codes emailed for sign-up and for login.
 
 Only the auth service uses them. The customer's profile stays in CultPass: a login just links an email
 and a password hash to a CultPass user id.
@@ -30,6 +30,18 @@ class VerificationCode(Base):
 
     email: Mapped[str] = mapped_column(String(254), primary_key=True)
     # HMAC-SHA256 of the email and the code: the code itself is never stored
+    code_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    expires_at = mapped_column(DateTime, nullable=False)
+    created_at = mapped_column(DateTime, nullable=False)
+
+
+class LoginCode(Base):
+    """The second step of a login: one pending code per login, emailed after the right password."""
+    __tablename__ = "login_codes"
+
+    email: Mapped[str] = mapped_column(String(254), primary_key=True)
+    # HMAC-SHA256 of the purpose, email and code: the code itself is never stored
     code_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     expires_at = mapped_column(DateTime, nullable=False)

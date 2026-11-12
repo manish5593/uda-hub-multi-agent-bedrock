@@ -231,14 +231,17 @@ BOB, CATHY = "bob.stone@granite.com", "cathy.bloom@florals.org"
 
 
 def customer_token(gateway, codes, email, password="a-good-password-1"):
-    """Sign up through the gateway (as a customer: no API key) and return the Authorization header."""
+    """Sign up and log in (password, then the emailed code) through the gateway, as a customer with no API key,
+    and return the Authorization header."""
     api_key = gateway.headers.pop("X-API-Key", None)
     assert gateway.post("/v1/auth/register/start", json={"email": email}).status_code == 202
     created = gateway.post("/v1/auth/register/complete",
                            json={"email": email, "code": codes[email], "password": password})
     assert created.status_code == 201, created.text
-    login = gateway.post("/v1/auth/login", json={"email": email, "password": password})
-    assert login.status_code == 200
+    codes.pop(email, None)
+    assert gateway.post("/v1/auth/login", json={"email": email, "password": password}).status_code == 202
+    login = gateway.post("/v1/auth/login/verify", json={"email": email, "code": codes[email]})
+    assert login.status_code == 200, login.text
     if api_key:
         gateway.headers["X-API-Key"] = api_key
     return {"Authorization": f"Bearer {login.json()['access_token']}"}
@@ -312,6 +315,8 @@ def test_gateway_relays_login_failures(gateway, codes):
     assert response.status_code == 401 and "Incorrect email or password" in response.json()["detail"]
     weak = gateway.post("/v1/auth/register/complete", json={"email": CATHY, "code": "123456", "password": "short"})
     assert weak.status_code == 422
+    bad_code = gateway.post("/v1/auth/login/verify", json={"email": BOB, "code": "123456"})
+    assert bad_code.status_code == 401 and "Invalid or expired login code" in bad_code.json()["detail"]
 
 
 def test_sign_up_and_login_are_rate_limited_per_client(gateway, monkeypatch):

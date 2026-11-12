@@ -181,7 +181,7 @@ python -m deploy.sagemaker_embeddings delete
 
 When UDA-Hub runs as microservices, customers can call the API themselves instead of going through a channel
 integration. They sign up with their CultPass email, which they prove with a 6-digit code sent to it, choose a
-password, and log in to get a JWT access token:
+password, and log in in two steps, the password and then a code emailed to them, to get a JWT access token:
 
 ```bash
 curl -s localhost:8080/v1/auth/register/start -H 'Content-Type: application/json' -d '{"email": "cathy.bloom@florals.org"}'
@@ -189,12 +189,16 @@ docker compose logs auth | grep 'Verification code'     # the demo logs the code
 curl -s localhost:8080/v1/auth/register/complete -H 'Content-Type: application/json' \
   -d '{"email": "cathy.bloom@florals.org", "code": "123456", "password": "Florals-2026-ok"}'
 curl -s localhost:8080/v1/auth/login -H 'Content-Type: application/json' \
-  -d '{"email": "cathy.bloom@florals.org", "password": "Florals-2026-ok"}'
+  -d '{"email": "cathy.bloom@florals.org", "password": "Florals-2026-ok"}'     # 202: a login code was sent
+docker compose logs auth | grep 'Login code'
+curl -s localhost:8080/v1/auth/login/verify -H 'Content-Type: application/json' \
+  -d '{"email": "cathy.bloom@florals.org", "code": "654321"}'                  # the access token
 ```
 
 They then send `Authorization: Bearer <token>` instead of `X-API-Key`. The token, not the message metadata, says
 who the customer is, and they can only see and continue their own tickets. Channel integrations keep using API
-keys. Passwords are stored as bcrypt hashes, and repeated failures lock the login. See
+keys. Passwords are stored as bcrypt hashes, a stolen password alone can't log in, and repeated wrong passwords or
+codes lock the login. See
 [`service/README.md`](service/README.md#customer-logins-jwt) for the details and the limitations.
 
 ### Tracing with Langfuse (optional)
@@ -270,7 +274,7 @@ UDAHUB_EVAL_JUDGE_MODEL=gpt-4o python -m evals.run    # a stronger judge, as in 
 - `tests/test_tracing.py` checks that Langfuse tracing is off without keys or without the package, and that when
   it is on each run gets its own handler, a session per ticket, and never the customer's email
 - `service/tests/` covers the microservices in one process: the service APIs, internal-token and API-key checks,
-  customer sign-up, login, lockout and tokens (forged, expired, tampered), customers reaching only their own
+  customer sign-up, two-step login with an emailed code, lockout and tokens (forged, expired, tampered), customers reaching only their own
   tickets, rate limiting, the full gateway → agent → services flow, the agent metrics, a service outage mid-turn, the
   Alembic migrations (that they match the models, downgrade cleanly, and adopt databases created before them), the
   pgvector index (search, re-embedding only what changed, one set of vectors per model, rebuilding after the

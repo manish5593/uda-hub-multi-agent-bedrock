@@ -178,11 +178,16 @@ docker compose logs auth | grep 'Verification code'
 curl -s localhost:8080/v1/auth/register/complete -H 'Content-Type: application/json' \
   -d '{"email": "cathy.bloom@florals.org", "code": "123456", "password": "Florals-2026-ok"}'
 
-# 3. Log in: {"access_token": "...", "token_type": "bearer", "expires_at": "..."}
+# 3. Log in with the password. A login code is then emailed (logged, in this demo): 202, no token yet
 curl -s localhost:8080/v1/auth/login -H 'Content-Type: application/json' \
   -d '{"email": "cathy.bloom@florals.org", "password": "Florals-2026-ok"}'
+docker compose logs auth | grep 'Login code'
 
-# 4. Use the token instead of an API key
+# 4. The login code: {"access_token": "...", "token_type": "bearer", "expires_at": "..."}
+curl -s localhost:8080/v1/auth/login/verify -H 'Content-Type: application/json' \
+  -d '{"email": "cathy.bloom@florals.org", "code": "654321"}'
+
+# 5. Use the token instead of an API key
 curl -s localhost:8080/v1/tickets/T-200/messages -H "Authorization: Bearer $TOKEN" \
   -H 'Content-Type: application/json' -d '{"text": "What are my reservations?"}'
 ```
@@ -199,8 +204,15 @@ How it works:
 - **Sign-up is verified.** A 6-digit code goes to the CultPass email and expires after 10 minutes. It works
   once, and five wrong guesses burn it. Only an HMAC of the code is stored. A new code can be asked for after
   60 seconds.
-- **Passwords** are stored as bcrypt hashes. Five wrong passwords in a row lock the login for 15 minutes. A
-  wrong password, an unknown email and a locked login all get the same `401`, and take about as long.
+- **Login takes two steps.** The right password gets no token: it sends a 6-digit login code to the
+  customer's email, with the same rules as a sign-up code (10 minutes, works once, five wrong guesses burn
+  it, only an HMAC stored, no new code within 60 seconds). The code gets the token, so a stolen password
+  alone is not enough. A sign-up code can never pass as a login code: the purpose is part of the HMAC.
+  `AUTH_LOGIN_CODES=false` turns the second step off.
+- **Passwords** are stored as bcrypt hashes. Five wrong passwords or login codes in a row lock the login for 15
+  minutes, and the count only resets after a complete login, so someone who knows the password gets no extra
+  guesses at the code. A wrong password, an unknown email and a locked login all get the same `401`, and take
+  about as long.
 - **Tokens** last 60 minutes (`JWT_TTL_MINUTES`). There is no refresh token: the customer logs in again.
 - **Rate limits:** sign-up and login are limited per client IP (10 a minute), and each logged-in customer
   has their own budget, like each API key.
@@ -324,7 +336,8 @@ Other commands: `alembic -c service/alembic.ini -n <database> current | history 
 | `GET /v1/tickets/{ticket_id}/messages` | | The conversation as the customer saw it; system notes (escalation handoffs, refund requests) are left out |
 | `POST /v1/auth/register/start` | `{"email"}` | `202`, with the same message whether or not a code was sent |
 | `POST /v1/auth/register/complete` | `{"email", "code", "password"}` | `201` `{access_token, token_type, expires_at}`; `400` for a wrong or expired code |
-| `POST /v1/auth/login` | `{"email", "password"}` | `{access_token, token_type, expires_at}`; `401` otherwise |
+| `POST /v1/auth/login` | `{"email", "password"}` | `202` `{detail, code_required}`: a login code was emailed; `401` otherwise. With login codes turned off, `{access_token, token_type, expires_at}` |
+| `POST /v1/auth/login/verify` | `{"email", "code"}` | `{access_token, token_type, expires_at}`; `401` for a wrong or expired code, or a locked login |
 
 The ticket endpoints take either credential:
 
@@ -376,8 +389,9 @@ UDAHUB_TEST_POSTGRES_URL=postgresql+psycopg://postgres:<password>@localhost:5432
 | `GATEWAY_AUTH_RATE_LIMIT_PER_MINUTE` | gateway | Sign-up and login requests per client IP per minute (default 10) |
 | `AUTH_DB_URL` | auth, migrate | SQLAlchemy URL of the auth database |
 | `AUTH_DB_PASSWORD` | db, db-setup | Password of the auth database's login role |
-| `AUTH_CODE_TTL_MINUTES`, `AUTH_CODE_RESEND_SECONDS`, `AUTH_CODE_MAX_ATTEMPTS` | auth | Verification codes: lifetime (default 10), wait before a new one (60), wrong guesses allowed (5) |
-| `AUTH_MAX_FAILED_LOGINS`, `AUTH_LOCKOUT_MINUTES` | auth | Wrong passwords before the login locks (default 5), and for how long (15) |
+| `AUTH_CODE_TTL_MINUTES`, `AUTH_CODE_RESEND_SECONDS`, `AUTH_CODE_MAX_ATTEMPTS` | auth | Sign-up and login codes: lifetime (default 10), wait before a new one (60), wrong guesses allowed (5) |
+| `AUTH_LOGIN_CODES` | auth | Whether login needs the emailed code after the password (default `true`) |
+| `AUTH_MAX_FAILED_LOGINS`, `AUTH_LOCKOUT_MINUTES` | auth | Wrong passwords or login codes before the login locks (default 5), and for how long (15) |
 | `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY` | agent, langfuse-web | The Langfuse project's API keys (`pk-lf-…`, `sk-lf-…`), created on Langfuse's first start; tracing is off when they are empty |
 | `LANGFUSE_ADMIN_EMAIL`, `LANGFUSE_ADMIN_PASSWORD` | langfuse-web | The Langfuse login created on first start |
 | `LANGFUSE_NEXTAUTH_SECRET`, `LANGFUSE_SALT`, `LANGFUSE_ENCRYPTION_KEY` | langfuse-web, langfuse-worker | Langfuse's own secrets; the encryption key is 64 hex characters (`openssl rand -hex 32`) |

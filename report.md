@@ -16,7 +16,7 @@ sessions.
 | **Data** | Two SQLite databases: `cultpass.db` (customers, subscriptions, experiences, reservations) and `udahub.db` (tickets, messages, 18 knowledge articles, long-term memory). As microservices, the same tables in Postgres, one database per service, with the knowledge embeddings stored in pgvector |
 | **Deployment** | `service/`: an API gateway and five services (agent, CultPass, tickets, knowledge, auth) with Postgres and pgvector, Alembic migrations, Docker Compose, customer sign-up and login with JWTs, Prometheus with a Grafana dashboard, optional Langfuse tracing, and a web chat for demos (section 4). Run end to end with the real model |
 | **Demonstration** | `solution/03_agentic_app.ipynb`, committed with the outputs of a real-model run: 13 scenarios, 5 edge cases, and demos of routing, retrieval, tools, memory and logs |
-| **Tests** | 86 offline tests in `solution/tests` (36 unit, 20 end-to-end through the graph with a scripted model, 26 for the evaluation suite, 4 for tracing) and 108 in `service/tests` (services, customer logins and tokens, the full HTTP flow, migrations on SQLite and Postgres, and the pgvector index on Postgres). No API key needed; GitHub Actions runs them on every pull request |
+| **Tests** | 86 offline tests in `solution/tests` (36 unit, 20 end-to-end through the graph with a scripted model, 26 for the evaluation suite, 4 for tracing) and 116 in `service/tests` (services, customer logins with emailed login codes, tokens, the full HTTP flow, migrations on SQLite and Postgres, and the pgvector index on Postgres). No API key needed; GitHub Actions runs them on every pull request |
 | **Evaluation** | `solution/evals`: 36 labelled tickets, 3 runs each, against the real model, scored in code and by an LLM judge. **108 of 108 runs (100%) passed every check** in each of the last two evaluations, up from 95 (88%) at the first; the runs in between scored 94–99%, so expect an occasional miss (section 5) |
 | **Environment** | Python 3.11, LangGraph 1.2.20, LangChain 1.4.9, langchain-openai 1.7.4, langchain-aws 1.9.2, SQLAlchemy 2.1, FastAPI 0.162, Postgres 16 with pgvector 0.8.7, PyJWT 2.15, bcrypt 5.0, Langfuse 4.78 (SDK 5.2) |
 
@@ -130,7 +130,12 @@ for them identity is something they proved, not something they typed:
   email. Unverified sign-up would let anyone claim an account that has no login yet. The code expires after 10
   minutes, works once, is burnt after 5 wrong guesses, and is stored only as an HMAC. Sign-up gives the same
   answer whether or not the email is a customer's, so it can't be used to find accounts.
-- **Passwords** are bcrypt hashes. Five failures lock the login for 15 minutes. A wrong password, an unknown email
+- **Two-step login.** The right password only sends a 6-digit login code to the customer's email, under the
+  same rules as the sign-up code; the code gets the token, so a stolen password alone is not enough. The purpose
+  is part of the code's HMAC, so a sign-up code can't be used to log in. `AUTH_LOGIN_CODES=false` turns it off.
+- **Passwords** are bcrypt hashes. Five failures, wrong passwords or wrong login codes, lock the login for 15
+  minutes. The count resets only after a complete login, so knowing the password gives no extra guesses at the
+  code. A wrong password, an unknown email
   and a locked login get the same `401`, and an unknown email is still checked against a dummy hash so the
   response time doesn't give it away.
 - **The token decides who the customer is.** The auth service issues a short-lived JWT (HS256, 60 minutes, with
@@ -416,8 +421,8 @@ cases, then the full evaluation:
   per embedding model because it needs a fixed vector dimension.
 - **The gateway's rate limits are per replica.** They are kept in memory; with several gateway replicas they
   would need Redis or Valkey.
-- **Logins are demo-grade in three ways.** Verification codes are written to the auth service's log instead of
-  emailed. Tokens can't be revoked before they expire (no logout, refresh token or password reset). And the auth
+- **Logins are demo-grade in three ways.** Sign-up and login codes are written to the auth service's log instead
+  of emailed, so the second step proves nothing until a real email provider replaces `deliver_code`. Tokens can't be revoked before they expire (no logout, refresh token or password reset). And the auth
   service and the gateway share one HS256 key, so the gateway could create tokens; RS256 or EdDSA would give it
   only a public key.
 - **Single platform.** Knowledge search already works per account, but the account tools are CultPass-specific.

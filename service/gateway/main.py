@@ -5,7 +5,7 @@ Two kinds of caller:
 * Channel integrations (web chat, email bridge) send an API key in X-API-Key (GATEWAY_API_KEYS is a
   comma-separated list). They are trusted: metadata such as the customer's email is taken as given, as in
   the original design.
-* Customers who logged in (POST /v1/auth/login) send their access token in `Authorization: Bearer`. The
+* Customers who logged in (POST /v1/auth/login, then the emailed code to /v1/auth/login/verify) send their access token in `Authorization: Bearer`. The
   token is verified here (service/common/tokens.py). Their identity comes from the token, never from the
   message metadata, and they can only see and continue their own tickets.
 
@@ -253,6 +253,15 @@ class LoginIn(EmailIn):
     password: str = Field(min_length=1, max_length=200)
 
 
+class LoginCodeIn(EmailIn):
+    code: str = Field(pattern=r"^\d{6}$", description="The 6-digit login code sent to the email")
+
+
+class LoginCodeSent(BaseModel):
+    detail: str
+    code_required: bool
+
+
 class TokenOut(BaseModel):
     access_token: str
     token_type: str
@@ -283,10 +292,19 @@ async def register_complete(body: RegisterIn):
     return await forward_auth("/register/complete", body)
 
 
-@app.post("/v1/auth/login", response_model=TokenOut, dependencies=[Depends(limit_client_ip)])
+@app.post("/v1/auth/login", response_model=TokenOut, dependencies=[Depends(limit_client_ip)],
+          responses={202: {"model": LoginCodeSent, "description": "Password accepted; a login code was emailed"}})
 async def login(body: LoginIn):
-    """Exchange email and password for an access token. Send it as `Authorization: Bearer <token>`."""
+    """Step 1 of login: email and password. A login code is then sent to the customer's email (`202`), to send
+    to `/v1/auth/login/verify`. If login codes are turned off, this returns the access token directly."""
     return await forward_auth("/login", body)
+
+
+@app.post("/v1/auth/login/verify", response_model=TokenOut, dependencies=[Depends(limit_client_ip)])
+async def login_verify(body: LoginCodeIn):
+    """Step 2 of login: the code from the email. Returns an access token; send it as
+    `Authorization: Bearer <token>`."""
+    return await forward_auth("/login/verify", body)
 
 
 DEMO_PAGE = pathlib.Path(__file__).with_name("demo.html")
