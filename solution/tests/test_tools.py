@@ -123,6 +123,33 @@ def test_gate_sees_the_account_the_agent_was_given():
     assert gate_evidence({"customer": {"identified": False}}) == []
 
 
+def test_a_reply_without_a_question_is_not_awaiting_the_customer(monkeypatch):
+    """The gate model marked answered replies that end with "let me know if..." as awaiting the customer,
+    which left the ticket open. Code overrides it when the draft asks nothing."""
+    from agentic.agents import quality_gate
+    from agentic.state import ResolutionAssessment
+    assert quality_gate.asks_a_question("Which reservation do you mean?")
+    assert quality_gate.asks_a_question("¿Cuál es tu correo")
+    assert not quality_gate.asks_a_question("You have 1 left this month. Let me know if you need anything!")
+
+    verdict = ResolutionAssessment(confidence=0.9, grounded=True, answered_by_evidence=True, needs_human=False,
+                                   awaiting_customer=True, reason="offers more help")
+
+    class Gate:
+        def with_structured_output(self, schema):
+            return self
+
+        def invoke(self, messages):
+            return verdict
+
+    monkeypatch.setattr(quality_gate, "get_llm", lambda: Gate())
+    state = {"messages": [], "trace": [], "ticket_id": "t-gate"}
+    answered = quality_gate.assess_resolution({**state, "draft_response": "Done. Let me know if you need more!"})
+    assert answered["assessment"]["awaiting_customer"] is False
+    asking = quality_gate.assess_resolution({**state, "draft_response": "Which of your two reservations?"})
+    assert asking["assessment"]["awaiting_customer"] is True
+
+
 def test_escalation_rules():
     ok = {"confidence": 0.9, "grounded": True, "answered_by_evidence": True, "needs_human": False}
     assert should_escalate({"assessment": ok})[0] is False

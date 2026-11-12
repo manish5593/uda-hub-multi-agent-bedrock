@@ -68,7 +68,7 @@ The judge is the configured chat model unless `UDAHUB_EVAL_JUDGE_MODEL` names an
 provider (for example `UDAHUB_EVAL_JUDGE_MODEL=gpt-4o`). A stronger judge is more reliable, and it avoids a
 model grading its own replies. The judge sees the customer's messages, the reply, and the evidence the agents
 had: the knowledge base articles they retrieved, the tool calls and their results, and the customer's
-profile. It doesn't see the case's description or the other expectations.
+profile and stored preferences. It doesn't see the case's description or the other expectations.
 
 ## The cases
 

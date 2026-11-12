@@ -30,17 +30,26 @@ Judge the draft against the evidence (the customer's account, knowledge base art
   customer: the request is done."""
 
 
+def asks_a_question(draft: str) -> bool:
+    """Whether the draft asks the customer anything. Questions end with '?' in the languages served, and
+    Spanish opens them with '¿'; the full-width '？' covers CJK text."""
+    return any(mark in draft for mark in ("?", "¿", "？"))
+
+
 def gate_evidence(state: dict) -> list[str]:
     """What the draft may rely on: the articles retrieved, the tool calls and their results, previous tickets,
-    and the customer's account as code loaded it from CultPass for this message (subscription, quota used
-    and remaining, blocked status). The account agent is given that profile too, so an answer taken from it
-    is grounded even when no tool was called."""
+    the customer's stored preferences, and the customer's account as code loaded it from CultPass for this
+    message (subscription, quota used and remaining, blocked status). The account agent is given the profile
+    and the preferences too, so an answer taken from them is grounded even when no tool was called."""
     evidence = []
     customer = state.get("customer") or {}
     if customer.get("identified"):
         account = {k: customer.get(k) for k in ("name", "is_blocked", "subscription")}
         evidence.append("Customer account (loaded from CultPass for this message):\n"
                         + json.dumps(account, indent=1, default=str))
+    if state.get("memories"):
+        evidence.append("Known customer preferences (long-term memory):\n"
+                        + "\n".join(f"- {m}" for m in state["memories"]))
     if state.get("knowledge"):
         evidence.append("Knowledge base:\n" + format_articles(state["knowledge"]))
     if state.get("actions_taken"):
@@ -69,6 +78,11 @@ def assess_resolution(state: dict) -> dict:
                              f"{chr(10).join(evidence) or 'No evidence.'}\n\nDraft reply:\n{draft}"),
     ])
     assessment = result.model_dump()
+    if assessment["awaiting_customer"] and not asks_a_question(draft):
+        # The model marks "let me know if..." offers as waiting for the customer, which left answered tickets
+        # open. A reply can only wait for an answer if it asks something, so code decides.
+        assessment["awaiting_customer"] = False
+        assessment["reason"] += " (no question in the draft, so not awaiting the customer)"
     return {"assessment": assessment, "trace": add_trace(
         state, f"[quality_gate] confidence={assessment['confidence']:.2f} grounded={assessment['grounded']} "
                f"needs_human={assessment['needs_human']}: {assessment['reason']}",

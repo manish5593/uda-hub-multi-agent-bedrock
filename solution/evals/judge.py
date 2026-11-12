@@ -2,7 +2,7 @@
 the case expects.
 
 The judge sees only the customer's messages, the reply, and the evidence the agents had (the knowledge base
-articles they retrieved, the tool calls and results, and the customer's profile). It uses the configured
+articles they retrieved, the tool calls and results, the customer's profile and stored preferences). It uses the configured
 chat model unless UDAHUB_EVAL_JUDGE_MODEL names another one from the same provider. A judge from a stronger
 model is more reliable, and avoids a model grading its own replies.
 """
@@ -21,7 +21,9 @@ FAITHFULNESS_PROMPT = """You check replies written by an AI customer support age
 List every factual claim in the reply that the evidence does not support: policies, prices, steps, dates,
 numbers, account details, or actions the reply says were taken. The evidence is the only source of truth.
 Do not count greetings, empathy, offers to help further, or questions to the customer as claims.
-A claim the evidence contradicts is unsupported."""
+A claim the evidence contradicts is unsupported.
+In tool results, "already_booked": true on an experience means this customer has booked it, so a reply saying
+they already booked it (with that experience's date) is supported."""
 
 KEY_POINTS_PROMPT = """You check replies written by an AI customer support agent for CultPass.
 For each expected point, decide whether the reply makes it. Judge the meaning, not the wording; the reply
@@ -63,6 +65,9 @@ def evidence_text(state: dict) -> str:
     if customer.get("identified"):
         parts.append("Customer profile:\n" + json.dumps(
             {k: customer.get(k) for k in ("name", "email", "is_blocked", "subscription")}, default=str))
+    if state.get("memories"):
+        parts.append("Known customer preferences (long-term memory):\n"
+                     + "\n".join(f"- {m}" for m in state["memories"]))
     if state.get("knowledge"):
         parts.append("Knowledge base articles:\n" + format_articles(state["knowledge"]))
     if state.get("actions_taken"):
