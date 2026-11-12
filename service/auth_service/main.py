@@ -51,7 +51,8 @@ MAX_PASSWORD_BYTES = 72  # bcrypt's limit
 CODE_SENT = "If this email belongs to a CultPass customer without a login, a verification code has been sent to it."
 INVALID_CODE = "Invalid or expired verification code"
 BAD_LOGIN = "Incorrect email or password, or too many failed attempts: try again later"
-LOGIN_CODE_SENT = "A login code has been sent to your email. Send it to /login/verify within 10 minutes."
+# Clients only reach this service through the gateway, so the message names the gateway's path
+LOGIN_CODE_SENT = "A login code has been sent to your email. Send it to /v1/auth/login/verify within {minutes} minutes."
 BAD_LOGIN_CODE = "Invalid or expired login code, or too many failed attempts: log in again"
 
 
@@ -244,7 +245,7 @@ def login(body: LoginIn, response: Response):
         return issue_access_token(customer_id, profile["name"])
     send_login_code(email)
     response.status_code = 202
-    return {"detail": LOGIN_CODE_SENT, "code_required": True}
+    return {"detail": LOGIN_CODE_SENT.format(minutes=int(CODE_TTL.total_seconds() // 60)), "code_required": True}
 
 
 @app.post("/login/verify")

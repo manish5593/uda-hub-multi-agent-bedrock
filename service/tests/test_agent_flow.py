@@ -239,7 +239,9 @@ def customer_token(gateway, codes, email, password="a-good-password-1"):
                            json={"email": email, "code": codes[email], "password": password})
     assert created.status_code == 201, created.text
     codes.pop(email, None)
-    assert gateway.post("/v1/auth/login", json={"email": email, "password": password}).status_code == 202
+    first = gateway.post("/v1/auth/login", json={"email": email, "password": password})
+    # The message points to the gateway's path, not the auth service's
+    assert first.status_code == 202 and "/v1/auth/login/verify within 10 minutes" in first.json()["detail"]
     login = gateway.post("/v1/auth/login/verify", json={"email": email, "code": codes[email]})
     assert login.status_code == 200, login.text
     if api_key:
