@@ -2,11 +2,12 @@
 import json
 import re
 
-from langchain_core.messages import AIMessage, SystemMessage, ToolMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain.agents import create_agent
 from langgraph.errors import GraphRecursionError
 
 from agentic.agents.common import add_trace, conversation, customer_context_block, text_of
+from agentic.agents.quality_gate import asks_a_question
 from agentic.llm import get_llm
 from agentic.tools.cultpass_tools import build_account_tools
 from agentic.tools.knowledge_tools import build_knowledge_tool
@@ -101,6 +102,12 @@ def correct_ids(draft: str, actions: list[dict]) -> tuple[str, list[str]]:
     return draft, [f"{token} -> {booked[0]}" for token in unknown]
 
 
+# Sent to the agent (never to the customer) when its reply used no tool and asks nothing
+CHECK_WITH_TOOLS = ("(Support system note, not from the customer: your reply used no tool. Answers about the account, "
+                    "reservations or experiences must come from this turn's tool results. Check with your tools now, then "
+                    "reply to the customer's last message.)")
+
+
 def resolve_with_account_tools(state: dict) -> dict:
     customer = state["customer"]
     classification = state.get("classification", {})
@@ -127,6 +134,21 @@ def resolve_with_account_tools(state: dict) -> dict:
                                error="recursion_limit"),
         }
     actions = _actions(result["messages"])
+    first_draft = text_of(result["messages"][-1])
+    if not actions and not asks_a_question(first_draft):
+        # The agent answered from memory, e.g. from earlier messages: the quality gate then saw no evidence and
+        # escalated a correct reply, or the agent announced a lookup instead of making it. One retry, with tools.
+        try:
+            retry = agent.invoke({"messages": [*conversation(state), HumanMessage(content=CHECK_WITH_TOOLS)]},
+                                 {"recursion_limit": 15})
+            retry_actions = _actions(retry["messages"])
+            if retry_actions:
+                result, actions = retry, retry_actions
+            state = {**state, "trace": add_trace(
+                state, f"[account_agent] reply used no tool; retried with tools: {[a['tool'] for a in retry_actions]}",
+                event="retry_with_tools", tools=[a["tool"] for a in retry_actions])}
+        except GraphRecursionError:
+            pass  # keep the first draft
     draft, fixed = correct_ids(text_of(result["messages"][-1]), actions)
     if fixed:
         state = {**state, "trace": add_trace(state, f"[account_agent] corrected ids in the draft: {fixed}",

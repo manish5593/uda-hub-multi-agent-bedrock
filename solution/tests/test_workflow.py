@@ -450,3 +450,44 @@ def test_empty_message_asks_what_the_customer_needs_without_the_llm(run):
     state = process_ticket("   ", "t-empty", agent=graph)
     assert state["route"] == "request_info" and state["final_response"] == EMPTY_MESSAGE_REPLY
     assert TicketClassification not in classifier.get_llm().prompts  # no classification call made
+
+
+def _agent_answering(monkeypatch, *replies):
+    """create_agent stand-in: each invoke returns the next scripted reply; a reply with "tools" calls them."""
+    calls = []
+
+    def fake_agent(*args, **kwargs):
+        class _Agent:
+            def invoke(self, payload, config=None):
+                calls.append(payload["messages"])
+                reply = replies[len(calls) - 1]
+                if "tools" not in reply:
+                    return {"messages": [*payload["messages"], AIMessage(content=reply["text"])]}
+                call = {"id": "c1", "name": reply["tools"], "args": {}}
+                return {"messages": [*payload["messages"], AIMessage(content="", tool_calls=[call]),
+                                     ToolMessage(content="[]", tool_call_id="c1"), AIMessage(content=reply["text"])]}
+        return _Agent()
+    monkeypatch.setattr(account_agent, "create_agent", fake_agent)
+    return calls
+
+
+def test_an_account_reply_made_without_tools_is_retried_with_them(run, monkeypatch):
+    """Answered from earlier messages, a correct reply had no evidence and was escalated."""
+    graph = run(classification=classification(issue_type="reservation", requires_account_action=True))
+    calls = _agent_answering(monkeypatch, {"text": "You already have the next available date."},
+                             {"tools": "get_my_reservations", "text": "You already have the 13 November date."})
+    state = process_ticket("Book it for the next available date", "t-retry", {"email": "bob.stone@granite.com"},
+                           agent=graph)
+    assert len(calls) == 2 and "used no tool" in calls[1][-1].content      # one retry, with the note
+    assert [a["tool"] for a in state["actions_taken"]] == ["get_my_reservations"]
+    assert state["draft_response"] == "You already have the 13 November date."
+    assert any("retried with tools" in line for line in state["trace"])
+    # The note never reaches the customer's conversation
+    assert all("used no tool" not in m["content"] for m in ticket_tools.get_ticket_messages("t-retry"))
+
+
+def test_a_clarifying_question_without_tools_is_not_retried(run, monkeypatch):
+    graph = run(classification=classification(issue_type="reservation", requires_account_action=True))
+    calls = _agent_answering(monkeypatch, {"text": "Which reservation would you like to change?"})
+    state = process_ticket("Change my booking", "t-ask", {"email": "bob.stone@granite.com"}, agent=graph)
+    assert len(calls) == 1 and state["draft_response"] == "Which reservation would you like to change?"

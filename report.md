@@ -425,8 +425,13 @@ Asking to change a reservation's date on the demo page found these:
 | **The gate escalated "which date would you like?"** with Claude, as if no tool could change a date: it was never told what the agent can do. | The gate's evidence lists the account agent's abilities. |
 | **"It doesn't run on 27 November" couldn't be checked.** Correct with both models, but the gate and the judge wouldn't accept an absence from a list of results. | Search results state every date an experience runs, the others, and `runs_only_on_this_date`; the judge's prompt explains them, as it does `remaining_this_month`. |
 
-Two evaluation cases replay it. Both models pass them (Claude 6 of 6; `gpt-4o-mini` 5 of 6 in the latest full run,
-where one run announced a lookup instead of making it).
+Two evaluation cases replay it. One `gpt-4o-mini` run announced a lookup instead of making it, and on the demo
+page the agent answered "the next available date" from earlier messages, which the gate couldn't see, so a correct
+reply was escalated. Now, if the account agent's reply used no tool and asks nothing, it runs once more with a note
+to check with its tools. With that, the full `gpt-4o-mini` evaluation passed 112 of 114 runs (98%) and Claude both
+new cases and the quota case 6 of 6. The two misses were the judge rejecting a correct "it only runs on 14
+November"; with its rule stated plainly, it accepted that reply 6 of 6 times and rejected a false date 3 of 3, but
+still flags about one correct run in five: claims that something doesn't exist are its least reliable checks.
 
 Trying the demo page as a customer found this:
 

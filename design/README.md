@@ -165,6 +165,7 @@ Each decision with real consequences is enforced in code rather than left to a p
 | A tool failure crashing the run | Unexpected tool errors are caught and returned to the agent as a structured error | `_safe` in `cultpass_tools.py` |
 | Promising a refund | Using `request_refund` always escalates, whatever the draft says | `should_escalate`, `ESCALATING_TOOLS` |
 | Losing a booking while changing its date | The new booking and the cancellation happen in one transaction; if the new one can't be booked, the old one is kept | `change_reservation` |
+| An account reply made without checking | If the account agent's reply used no tool and asks the customer nothing, it runs once more with an internal note to check with its tools (it had announced lookups instead of making them, or answered from earlier messages the gate couldn't see) | `resolve_with_account_tools` |
 | An escalated reply hiding what was done | Bookings, cancellations and changes that succeeded in the turn are listed to the escalation agent, and code adds any the reply leaves out | `completed_actions`, `escalate` |
 | Answering a blocked account, legal issue or human request | Routing rules send these to `escalation_agent` before `knowledge_agent` or `account_agent` runs | `route_ticket` |
 | Repeating a fix that already failed | A problem the customer reported before goes straight to a human | `route_ticket`, `repeat_issue_types` |

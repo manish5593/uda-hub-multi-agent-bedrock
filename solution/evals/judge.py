@@ -30,9 +30,10 @@ they already booked it (with that experience's date) is supported.
 "remaining_this_month" in a booking, cancellation or change result is how many experiences the customer has left
 this month after that action: a reply giving that number, or saying it stayed the same when the profile showed the
 same number before, is supported. A different number is not.
-"dates_with_free_slots" on an experience lists every date that experience runs with free slots,
-"other_dates_with_free_slots" the others, and "runs_only_on_this_date": true means there are none: a reply saying it
-only runs on those dates, or isn't available on another date, is supported."""
+"dates_with_free_slots" on an experience lists every date that experience runs with free slots, and
+"other_dates_with_free_slots" the others. When a tool result has "runs_only_on_this_date": true, the experience runs
+on no other date: "there are no other dates", "it isn't available on <any other date>" and "the only date is <its
+date>" are all supported by that result. Don't list such a claim as unsupported."""
 
 KEY_POINTS_PROMPT = """You check replies written by an AI customer support agent for CultPass.
 For each expected point, decide whether the reply makes it. Judge the meaning, not the wording; the reply
