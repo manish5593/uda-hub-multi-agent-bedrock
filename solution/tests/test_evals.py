@@ -108,7 +108,7 @@ class FakeJudge:
     def __init__(self, unsupported=(), met=True, fail=False):
         self.unsupported, self.met, self.fail = list(unsupported), met, fail
 
-    def check_key_points(self, messages, reply, points):
+    def check_key_points(self, messages, reply, points, session_id=None):
         if self.fail:
             raise TimeoutError("judge timed out")
         return [PointVerdict(point=p, met=self.met, reason="checked") for p in points]

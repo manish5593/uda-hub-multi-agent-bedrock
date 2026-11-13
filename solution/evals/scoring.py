@@ -84,7 +84,8 @@ def judged_checks(expect: Expect, state: dict, customer_messages: list[str], jud
     reply = state.get("final_response") or ""
     if expect.key_points:
         try:
-            for verdict in judge.check_key_points(customer_messages, reply, expect.key_points):
+            for verdict in judge.check_key_points(customer_messages, reply, expect.key_points,
+                                                  session_id=state.get("ticket_id")):
                 checks.append(Check("key_point", verdict.met, verdict.point, None, verdict.reason))
         except Exception as exc:  # the judge failing is not the system failing
             checks += [Check("key_point", None, p, None, f"judge error: {type(exc).__name__}: {exc}")

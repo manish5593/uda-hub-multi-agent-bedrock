@@ -16,6 +16,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, Field
 
 from agentic import config
+from agentic.tracing import call_config
 from agentic.tools.knowledge_tools import format_articles
 
 FAITHFULNESS_PROMPT = """You check replies written by an AI customer support agent for CultPass.
@@ -89,22 +90,29 @@ def evidence_text(state: dict) -> str:
     return "\n\n".join(parts) or "No evidence."
 
 
-def check_faithfulness(customer_messages: list[str], reply: str, state: dict, llm=None) -> Faithfulness:
+def _trace(check: str, session_id: str | None) -> dict:
+    """Each judge call is a Langfuse trace (when tracing is on) in the session of the ticket it judges."""
+    return call_config(f"udahub-eval-judge-{check}", session_id, ["eval-judge", judge_model_name()])
+
+
+def check_faithfulness(customer_messages: list[str], reply: str, state: dict, llm=None,
+                       session_id: str | None = None) -> Faithfulness:
     llm = llm or judge_llm()
     return llm.with_structured_output(Faithfulness).invoke([
         SystemMessage(content=FAITHFULNESS_PROMPT),
         HumanMessage(content="Customer messages:\n" + "\n".join(customer_messages)
                              + f"\n\nEvidence:\n{evidence_text(state)}\n\nReply:\n{reply}"),
-    ])
+    ], config=_trace("faithfulness", session_id or state.get("ticket_id")))
 
 
-def check_key_points(customer_messages: list[str], reply: str, points: list[str], llm=None) -> list[PointVerdict]:
+def check_key_points(customer_messages: list[str], reply: str, points: list[str], llm=None,
+                     session_id: str | None = None) -> list[PointVerdict]:
     llm = llm or judge_llm()
     result: KeyPoints = llm.with_structured_output(KeyPoints).invoke([
         SystemMessage(content=KEY_POINTS_PROMPT),
         HumanMessage(content="Customer messages:\n" + "\n".join(customer_messages) + f"\n\nReply:\n{reply}\n\n"
                              "Expected points:\n" + "\n".join(f"{i + 1}. {p}" for i, p in enumerate(points))),
-    ])
+    ], config=_trace("key-points", session_id))
     verdicts = list(result.verdicts)
     if len(verdicts) != len(points):
         raise ValueError(f"judge returned {len(verdicts)} verdicts for {len(points)} points")

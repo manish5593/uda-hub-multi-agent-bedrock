@@ -48,3 +48,24 @@ def run_config(ticket_id: str, metadata: Optional[dict] = None) -> dict:
     # One handler per run: it holds that run's span tree. The Langfuse client behind it is shared.
     config.update(callbacks=[handler_class()], run_name=TRACE_NAME, metadata=trace_metadata)
     return config
+
+
+def call_config(trace_name: str, session_id: Optional[str] = None, tags: Optional[list[str]] = None) -> dict:
+    """Config for a model call made outside the graph, e.g. the evaluation judge: its own Langfuse trace, in the
+    same session as the ticket it judges. Empty when tracing is off."""
+    handler_class = _callback_handler_class() if langfuse_enabled() else None
+    if handler_class is None:
+        return {}
+    metadata = {"langfuse_trace_name": trace_name}
+    if session_id:
+        metadata["langfuse_session_id"] = session_id
+    if tags:
+        metadata["langfuse_tags"] = tags
+    return {"callbacks": [handler_class()], "run_name": trace_name, "metadata": metadata}
+
+
+def flush() -> None:
+    """Send buffered traces now, for short-lived processes such as the evaluation runner."""
+    if langfuse_enabled() and _callback_handler_class() is not None:
+        from langfuse import get_client
+        get_client().flush()

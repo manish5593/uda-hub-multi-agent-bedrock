@@ -34,7 +34,7 @@ if __name__ == "__main__":
 
 from langgraph.checkpoint.memory import MemorySaver  # noqa: E402
 
-from agentic import config, verification  # noqa: E402
+from agentic import config, tracing, verification  # noqa: E402
 from agentic.verification import deliver_code  # noqa: E402
 from agentic.demo_data import copy_demo_databases  # noqa: E402
 from agentic.tools import db  # noqa: E402
@@ -292,6 +292,7 @@ def main(argv=None) -> int:
             "cases": len(cases), "turns": sum(len(c.turns) for c in cases), "runs_per_case": args.runs,
             "commit": git_commit(), "cases_file": str(args.cases)}
     summary = summarize(cases, records)
+    tracing.flush()  # Langfuse traces of the agents and the judge, when tracing is on
     (out / "results.partial.json").unlink(missing_ok=True)
     (out / "results.json").write_text(json.dumps({"meta": meta, "summary": summary, "runs": records},
                                                  indent=1, ensure_ascii=False, default=str), encoding="utf-8")
