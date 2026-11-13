@@ -183,6 +183,9 @@ services:
       TICKET_SERVICE_URL: http://tickets:8000
       KNOWLEDGE_SERVICE_URL: http://knowledge:8000
       AGENT_STATE_DB_URL: postgresql://agent_state_svc:${AGENT_STATE_DB_PASSWORD}@db:5432/agent_state
+      # Seconds per call to the other services: a knowledge search waits on Bedrock's Titan embeddings, whose first
+      # call after a restart took 21 s (the default 15 s timed out and the customer got the fallback reply)
+      UDAHUB_SERVICE_TIMEOUT: ${UDAHUB_SERVICE_TIMEOUT:-30}
       # Langfuse tracing: on when both keys are set in .env (run with --profile langfuse), off when they are empty
       LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}
       LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
