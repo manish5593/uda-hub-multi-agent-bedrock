@@ -17,7 +17,7 @@ sessions.
 | **Deployment** | `service/`: an API gateway and five services (agent, CultPass, tickets, knowledge, auth) with Postgres and pgvector, Alembic migrations, Docker Compose, customer sign-up and login with JWTs, Prometheus with a Grafana dashboard, optional Langfuse tracing, and a web chat for demos (section 4). Run end to end with the real model |
 | **Demonstration** | `solution/03_agentic_app.ipynb`, committed with the outputs of a real-model run: 13 scenarios, 5 edge cases, and demos of routing, retrieval, tools, memory and logs |
 | **Tests** | 106 offline tests in `solution/tests` (51 unit, 25 end-to-end through the graph with a scripted model, 26 for the evaluation suite, 4 for tracing) and 119 in `service/tests` (services, customer logins with emailed login codes, tokens, the full HTTP flow, migrations on SQLite and Postgres, and the pgvector index on Postgres). No API key needed; GitHub Actions runs them on every pull request |
-| **Evaluation** | `solution/evals`: 38 labelled tickets, 3 runs each, against the real model, scored in code and by an LLM judge. **108 of 108 runs (100%) passed every check** with `gpt-4o-mini` in each of the last three evaluations, up from 95 (88%) at the first, and 108 of 108 with Claude Haiku 4.5 on Bedrock; the runs in between scored 94–99%, so expect an occasional miss (section 5) |
+| **Evaluation** | `solution/evals`: 38 labelled tickets, 3 runs each, against the real model, scored in code and by an LLM judge. **108 of 108 runs (100%) passed every check** with `gpt-4o-mini` in each of the last three evaluations, up from 95 (88%) at the first, and 114 of 114 (all 38 cases) with Claude Haiku 4.5 on Bedrock; the runs in between scored 94–99%, so expect an occasional miss (section 5) |
 | **Environment** | Python 3.11, LangGraph 1.2.20, LangChain 1.4.9, langchain-openai 1.7.4, langchain-aws 1.9.2, SQLAlchemy 2.1, FastAPI 0.162, Postgres 16 with pgvector 0.8.7, PyJWT 2.15, bcrypt 5.0, Langfuse 4.78 (SDK 5.2) |
 
 The main lesson matched what I'd learned building earlier agent systems: **the LLM proposes, code decides.**
@@ -322,6 +322,7 @@ The same 36 cases ran with Claude Haiku 4.5 on Bedrock and Titan embeddings, jud
 |---|---|---|---|
 | `gpt-4o-mini` (OpenAI) | 108 / 108 | 5.9 s | The same code, the same day |
 | Claude Haiku 4.5 (Bedrock) | **108 / 108** | 16.7 s | One uninterrupted run, rate-limited to 10 calls a minute |
+| Claude Haiku 4.5 (Bedrock), 38 cases | **114 / 114** | 17.1 s | The final run, after the date-change fixes and the retry with tools |
 | Amazon Nova Pro (Bedrock) | 84 / 101 (83%) | 4.5 s | Earlier code: 7 runs crashed on a bug since fixed, and it wasn't re-run |
 
 Getting there took three kinds of change, all model-neutral, and `gpt-4o-mini` passed every case after each:

@@ -5,7 +5,7 @@
 > `UDAHUB_LLM_PROVIDER=bedrock` to use Claude through the Bedrock Converse API, with Titan Text Embeddings V2 for
 > retrieval. Retrieval embeddings can instead come from an Amazon SageMaker endpoint
 > ([below](#sagemaker-embeddings)). **Status:** with Claude Haiku 4.5 and Titan embeddings on Bedrock, the full
-> evaluation passed **108 of 108 runs (100%)**, as it does with `gpt-4o-mini` ([results](#evaluation-results)). The
+> evaluation passed **114 of 114 runs (100%)**, all 38 cases, as `gpt-4o-mini` does ([results](#evaluation-results)). The
 > account's Claude quota is small (about 19 calls a minute, and AWS declined an increase), so a client-side rate
 > limiter spaces the calls out (`UDAHUB_BEDROCK_REQUESTS_PER_MINUTE`). SageMaker hasn't been run. The demo results
 > and the end-to-end run of the microservices use OpenAI (`gpt-4o-mini`).
@@ -73,8 +73,8 @@ The same workflow, with the same nodes, prompts, tools and rules, runs in two wa
 
 An evaluation suite ([`solution/evals/`](solution/evals/README.md)) runs 38 labelled tickets against the real model
 and reports routing, outcome, tool and answer accuracy: **108 of 108 runs passed every check (100%)** with
-`gpt-4o-mini` in each of the last three evaluations, up from 88% at the first, and 108 of 108 with Claude Haiku 4.5
-on Bedrock ([results](#evaluation-results)). Earlier runs scored 94–99%, so expect an occasional miss. GitHub
+`gpt-4o-mini` in each of the last three evaluations, up from 88% at the first, and 114 of 114 (all 38 cases) with
+Claude Haiku 4.5 on Bedrock ([results](#evaluation-results)). Earlier runs scored 94–99%, so expect an occasional miss. GitHub
 Actions runs the offline tests on every pull request.
 
 ## Repository layout
@@ -330,13 +330,15 @@ same evaluation also passed **108 of 108 runs (100%)**:
 |---|---|---|---|
 | `gpt-4o-mini` (OpenAI) | 108 / 108 | 5.9 s | |
 | Claude Haiku 4.5 (Bedrock) | 108 / 108 | 16.7 s | Rate-limited to 10 calls a minute to fit the account's quota; most of the time is waiting |
+| Claude Haiku 4.5 (Bedrock), all 38 cases with every fix | **114 / 114** | 17.1 s | The final run, including the date-change cases |
 | Amazon Nova Pro (Bedrock) | 84 / 101 (83%) | 4.5 s | Earlier code; 7 runs crashed on a bug since fixed. Not re-run |
 
 Claude's first runs failed three guest how-to questions and four account cases; each was fixed in code that
 works for every model (report section 6), and `gpt-4o-mini` stayed at 100% throughout.
 
 Two cases were added since, for changing a reservation's date (38 in all). With every fix, the latest
-`gpt-4o-mini` evaluation passed 113 of 114 runs (99%); Claude Haiku 4.5 passed both new cases 6 of 6.
+`gpt-4o-mini` evaluation passed 112 of 114 runs (98%; both misses a judge rule fixed since), and Claude Haiku 4.5
+passed **114 of 114 (100%)** in one uninterrupted run.
 
 | Category | First | Latest | | Check | First | Latest |
 |---|---|---|---|---|---|---|

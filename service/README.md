@@ -16,7 +16,7 @@ monitoring and Langfuse included, has been run end to end with `docker compose` 
 cancellations and refund requests, escalations to the right teams, no errors, and replies in 1 to 13 seconds.
 Customer sign-up and login worked, with the token deciding who the customer is. Prometheus counted every turn,
 Langfuse traced every message, and the knowledge service searched its pgvector index. On Amazon Bedrock,
-Claude Haiku 4.5 passed the full evaluation (108 of 108); the stack itself ran on OpenAI.
+Claude Haiku 4.5 passed the full evaluation (114 of 114, all 38 cases); the stack itself ran on OpenAI.
 
 ## Architecture
 
