@@ -129,7 +129,7 @@ python -m pytest tests
 ## Evaluation
 
 The tests script the model, so they can't say how often the real model gets a ticket right. The evaluation
-suite runs 36 labelled tickets through the whole system with the real model, several times each, and
+suite runs 38 labelled tickets through the whole system with the real model, several times each, and
 reports how often the classification, route, outcome, escalation team, tool calls and reply are right. Replies
 are checked by an LLM judge for faithfulness to the evidence and for the points each case expects.
 
@@ -190,4 +190,4 @@ The project overview for the whole repository is in the [root README](../README.
 | Error handling and edge cases | `process_ticket()` in `agentic/workflow.py`, and notebook 03's "Edge cases" cell |
 | Safeguards enforced in code | [`../design`](../design/README.md#safeguards-the-llm-proposes-code-decides) |
 | Demo run with outputs | `03_agentic_app.ipynb`, summarised under [Demo results](#demo-results-notebook-03) |
-| Measuring accuracy over repeated runs | [`evals/`](evals/README.md): 36 labelled tickets scored in code and by an LLM judge |
+| Measuring accuracy over repeated runs | [`evals/`](evals/README.md): 38 labelled tickets scored in code and by an LLM judge |

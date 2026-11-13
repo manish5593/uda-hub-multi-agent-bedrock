@@ -26,7 +26,13 @@ such as "you might enjoy" as claims.
 A claim the evidence contradicts is unsupported.
 Everything in a knowledge base article is evidence, its "Suggested phrasing" included: the agent is told to use it.
 In tool results, "already_booked": true on an experience means this customer has booked it, so a reply saying
-they already booked it (with that experience's date) is supported."""
+they already booked it (with that experience's date) is supported.
+"remaining_this_month" in a booking, cancellation or change result is how many experiences the customer has left
+this month after that action: a reply giving that number, or saying it stayed the same when the profile showed the
+same number before, is supported. A different number is not.
+"dates_with_free_slots" on an experience lists every date that experience runs with free slots,
+"other_dates_with_free_slots" the others, and "runs_only_on_this_date": true means there are none: a reply saying it
+only runs on those dates, or isn't available on another date, is supported."""
 
 KEY_POINTS_PROMPT = """You check replies written by an AI customer support agent for CultPass.
 For each expected point, decide whether the reply makes it. Judge the meaning, not the wording; the reply

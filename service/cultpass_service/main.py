@@ -61,6 +61,12 @@ def cancel(user_id: str, reservation_id: str):
     return cp.cancel_reservation(user_id, reservation_id)
 
 
+@app.post("/customers/{user_id}/reservations/{reservation_id}/change")
+def change(user_id: str, reservation_id: str, body: ReservationIn):
+    """Book another experience in place of a reservation, in one transaction (the old one is kept on failure)."""
+    return cp.change_reservation(user_id, reservation_id, body.experience_id)
+
+
 @app.post("/customers/{user_id}/subscription/{action}")
 def change_subscription(user_id: str, action: str):
     # An unknown action is a rule failure returned as data, as in the local function

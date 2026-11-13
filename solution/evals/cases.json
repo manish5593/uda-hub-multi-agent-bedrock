@@ -260,6 +260,44 @@
     }]
   },
   {
+    "id": "acct_change_date_unavailable",
+    "category": "account",
+    "description": "Cathy asks to change her reservation's date, then gives a date the experience doesn't run: the reservation is kept, never cancelled first (a real conversation cancelled it, then said the new date was 'already reserved by you')",
+    "turns": [
+      {
+        "text": "I need to change the date of my reservation.",
+        "metadata": {"email": "cathy.bloom@florals.org"},
+        "expect": {
+          "route": "account_agent", "status": ["resolved", "awaiting_customer"],
+          "tools_not_succeeded": ["cancel_my_reservation", "change_reservation_date"]
+        }
+      },
+      {
+        "text": "27 November please.",
+        "expect": {
+          "route": "account_agent", "status": ["resolved", "awaiting_customer"],
+          "tools_not_succeeded": ["cancel_my_reservation", "change_reservation_date"],
+          "key_points": ["Says Sunset Paddleboarding has no date the customer can book on 27 November (or no other date)",
+                         "Does not say the existing reservation was cancelled"]
+        }
+      }
+    ]
+  },
+  {
+    "id": "acct_change_to_other_experience",
+    "category": "account",
+    "description": "Cathy moves her Sunset Paddleboarding reservation to Modern Art at MASP: one change, which books the new one and cancels the old one together",
+    "turns": [{
+      "text": "Please move my Sunset Paddleboarding booking to the Modern Art at MASP visit instead.",
+      "metadata": {"email": "cathy.bloom@florals.org"},
+      "expect": {
+        "route": "account_agent", "status": ["resolved", "awaiting_customer"],
+        "tools_succeeded": ["change_reservation_date"], "tools_not_succeeded": ["cancel_my_reservation"],
+        "key_points": ["Confirms the reservation is now for Modern Art at MASP"]
+      }
+    }]
+  },
+  {
     "id": "acct_pause_subscription",
     "category": "account",
     "description": "Frank asks to pause his subscription",

@@ -671,3 +671,93 @@ def test_codes_can_be_emailed_through_gmail_smtp(monkeypatch, caplog):
     message = sent["message"]
     assert message["To"] == "bob.stone@granite.com" and "support@example.com" in message["From"]
     assert "482913" in message.get_content() and "482913" not in caplog.text
+
+
+# --- Changing a reservation's date --------------------------------------------
+
+def _reserved(user_id):
+    return {r["reservation_id"]: r["experience"] for r in cp.list_reservations(user_id) if r["status"] == "reserved"}
+
+
+def test_changing_a_reservation_books_the_new_one_and_cancels_the_old_one_together():
+    cathy = "88382b"   # basic plan, Sunset Paddleboarding booked
+    (old_id, old_title), = _reserved(cathy).items()
+    masp = next(e for e in cp.search_experiences("MASP"))
+    quota_before = cp.get_customer_profile(cathy)["subscription"]["remaining_this_month"]
+    moved = cp.change_reservation(cathy, old_id, masp["experience_id"])
+    assert moved["success"] and moved["experience"] == "Modern Art at MASP" and moved["replaced_reservation_id"] == old_id
+    assert _reserved(cathy) == {moved["reservation_id"]: "Modern Art at MASP"}
+    assert moved["remaining_this_month"] == quota_before          # a change uses no extra quota
+
+
+@pytest.mark.parametrize("target, why", [
+    ("same", "already for"),                                 # nothing to change
+    ("premium", "premium experience"),                       # a basic plan can't book it
+])
+def test_a_change_that_cant_be_booked_keeps_the_reservation(target, why):
+    """Cancelling first left a customer with no booking when the new date didn't exist."""
+    cathy = "88382b"
+    (old_id, _), = _reserved(cathy).items()
+    experiences = cp.search_experiences()
+    reservation = next(r for r in cp.list_reservations(cathy) if r["reservation_id"] == old_id)
+    exp_id = (reservation["experience_id"] if target == "same"
+              else next(e["experience_id"] for e in experiences if e["is_premium"]))
+    result = cp.change_reservation(cathy, old_id, exp_id)
+    assert result["success"] is False and why in result["error"]
+    assert old_id in _reserved(cathy)                                # still booked
+
+
+def test_the_change_tool_only_takes_ids_looked_up_this_turn():
+    cathy = "88382b"
+    tools = {t.name: t for t in cp.build_account_tools(cathy, "t-change")}
+    (old_id, _), = _reserved(cathy).items()
+    masp = next(e for e in cp.search_experiences("MASP"))["experience_id"]
+    refused = tools["change_reservation_date"].invoke({"reservation_id": old_id, "experience_id": masp})
+    assert refused["success"] is False and old_id in _reserved(cathy)
+    tools["get_my_reservations"].invoke({})
+    tools["find_experiences"].invoke({"query": "MASP"})
+    assert tools["change_reservation_date"].invoke({"reservation_id": old_id, "experience_id": masp})["success"]
+
+
+def test_an_escalated_reply_tells_the_customer_what_was_already_done(monkeypatch):
+    """A booking was made, then the reply was escalated and only said "a specialist will help you book"."""
+    from langchain_core.messages import AIMessage
+    from agentic.agents import escalation_agent
+    from agentic.agents.escalation_agent import EscalationHandoff, completed_actions
+    actions = [{"tool": "find_experiences", "args": {}, "result": []},
+               {"tool": "book_experience", "args": {}, "result": {
+                   "success": True, "reservation_id": "ab12cd", "experience": "Modern Art at MASP",
+                   "when": "2026-11-17 22:57"}},
+               {"tool": "cancel_my_reservation", "args": {}, "result": {"success": False, "error": "x"}}]
+    assert [d["must_mention"] for d in completed_actions(actions)] == ["Modern Art at MASP"]
+
+    class Writer:   # the model writes a reply that forgets the booking
+        def with_structured_output(self, schema):
+            return self
+        def invoke(self, messages):
+            assert "Modern Art at MASP" in messages[0].content   # the prompt lists what was done
+            return EscalationHandoff(team="general_support", priority="medium", summary="s", steps_taken=[],
+                                     recommended_next_step="r", customer_message="A specialist will help you book.")
+    monkeypatch.setattr(escalation_agent, "get_llm", lambda *a, **k: Writer())
+    monkeypatch.setattr(escalation_agent.ticket_tools, "add_message", lambda *a, **k: None)
+    state = {"ticket_id": "t-esc", "route": "escalation_agent", "route_reason": "test", "actions_taken": actions,
+             "classification": {"language": "English"}, "messages": [], "customer": {}}
+    reply = escalation_agent.escalate(state)["final_response"]
+    assert "Already done:" in reply and "Modern Art at MASP" in reply and "ab12cd" in reply
+
+
+def test_the_gate_knows_what_the_account_agent_can_do():
+    """Without it, the gate escalated "which date would you like?" as if no tool could change a date."""
+    from agentic.agents.quality_gate import gate_evidence
+    account = "\n".join(gate_evidence({"resolver": "account_agent"}))
+    assert "change a reservation to another date" in account
+    assert "account agent can do" not in "\n".join(gate_evidence({"resolver": "knowledge_agent"}))
+
+
+def test_search_results_list_every_date_an_experience_runs():
+    """"No other dates" was a correct answer the judge couldn't verify: no result said it was the only date."""
+    tools = {t.name: t for t in cp.build_account_tools("88382b", "t-dates")}
+    sunset = next(e for e in tools["find_experiences"].invoke({"query": "paddleboarding"}))
+    assert sunset["dates_with_free_slots"] == [sunset["when"]]           # the demo data runs each once
+    assert sunset["other_dates_with_free_slots"] == [] and sunset["runs_only_on_this_date"] is True
+    assert all(e["dates_with_free_slots"] for e in tools["find_experiences"].invoke({}))

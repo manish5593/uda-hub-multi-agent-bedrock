@@ -26,6 +26,14 @@ Judge the draft against the evidence (the customer's account, knowledge base art
   hasn't tried them yet.
 - A claim about anyone other than this customer (another person's reservations or account) is NOT grounded:
   the tools only show this customer's account.
+- A claim that a tool result contradicts is NOT grounded: e.g. saying the customer already has a reservation when
+  a tool just cancelled it or doesn't list it, or that something was booked or cancelled when no tool did it.
+  Check the order of the tool calls: a later result overrides an earlier one.
+- In find_experiences results, other_dates_with_free_slots lists every other date the experience runs, and
+  runs_only_on_this_date: true means it runs on no other date: a draft saying another date isn't available is
+  then grounded.
+- If the request can be read more than one way ("the next available date"), a draft that did what the tools
+  allowed under a reasonable reading, and says plainly what it did, is grounded and answers the request.
 - awaiting_customer: true if the draft asks a clarifying question that is genuinely needed to proceed.
   A good clarifying question is a valid outcome and deserves high confidence. A draft that answers the
   request and then offers more help ("feel free to ask", "if you'd like, I can...") is NOT awaiting the
@@ -38,12 +46,22 @@ def asks_a_question(draft: str) -> bool:
     return any(mark in draft for mark in ("?", "¿", "？"))
 
 
+ACCOUNT_AGENT_ABILITIES = ("look up the customer's account, quota and reservations; search the experience catalog; "
+                           "recommend experiences; book an experience; cancel a reservation; change a reservation to "
+                           "another date or experience; pause, resume or cancel the subscription; register a refund "
+                           "request for support-lead approval; search the knowledge base")
+
+
 def gate_evidence(state: dict) -> list[str]:
     """What the draft may rely on: the articles retrieved, the tool calls and their results, previous tickets,
     the customer's stored preferences, and the customer's account as code loaded it from CultPass for this
     message (subscription, quota used and remaining, blocked status). The account agent is given the profile
     and the preferences too, so an answer taken from them is grounded even when no tool was called."""
     evidence = []
+    if state.get("resolver") == "account_agent":
+        # The gate escalated "which date would you like?" because nothing told it the agent could change a date
+        evidence.append("What the account agent can do with its tools (so a draft that asks the customer for the "
+                        "detail needed to do one of these is a valid step): " + ACCOUNT_AGENT_ABILITIES)
     customer = state.get("customer") or {}
     if customer.get("identified"):
         account = {k: customer.get(k) for k in ("name", "is_blocked", "subscription")}

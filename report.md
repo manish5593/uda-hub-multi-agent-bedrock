@@ -16,8 +16,8 @@ sessions.
 | **Data** | Two SQLite databases: `cultpass.db` (customers, subscriptions, experiences, reservations) and `udahub.db` (tickets, messages, 18 knowledge articles, long-term memory). As microservices, the same tables in Postgres, one database per service, with the knowledge embeddings stored in pgvector |
 | **Deployment** | `service/`: an API gateway and five services (agent, CultPass, tickets, knowledge, auth) with Postgres and pgvector, Alembic migrations, Docker Compose, customer sign-up and login with JWTs, Prometheus with a Grafana dashboard, optional Langfuse tracing, and a web chat for demos (section 4). Run end to end with the real model |
 | **Demonstration** | `solution/03_agentic_app.ipynb`, committed with the outputs of a real-model run: 13 scenarios, 5 edge cases, and demos of routing, retrieval, tools, memory and logs |
-| **Tests** | 98 offline tests in `solution/tests` (43 unit, 25 end-to-end through the graph with a scripted model, 26 for the evaluation suite, 4 for tracing) and 119 in `service/tests` (services, customer logins with emailed login codes, tokens, the full HTTP flow, migrations on SQLite and Postgres, and the pgvector index on Postgres). No API key needed; GitHub Actions runs them on every pull request |
-| **Evaluation** | `solution/evals`: 36 labelled tickets, 3 runs each, against the real model, scored in code and by an LLM judge. **108 of 108 runs (100%) passed every check** with `gpt-4o-mini` in each of the last three evaluations, up from 95 (88%) at the first, and 108 of 108 with Claude Haiku 4.5 on Bedrock; the runs in between scored 94–99%, so expect an occasional miss (section 5) |
+| **Tests** | 106 offline tests in `solution/tests` (51 unit, 25 end-to-end through the graph with a scripted model, 26 for the evaluation suite, 4 for tracing) and 119 in `service/tests` (services, customer logins with emailed login codes, tokens, the full HTTP flow, migrations on SQLite and Postgres, and the pgvector index on Postgres). No API key needed; GitHub Actions runs them on every pull request |
+| **Evaluation** | `solution/evals`: 38 labelled tickets, 3 runs each, against the real model, scored in code and by an LLM judge. **108 of 108 runs (100%) passed every check** with `gpt-4o-mini` in each of the last three evaluations, up from 95 (88%) at the first, and 108 of 108 with Claude Haiku 4.5 on Bedrock; the runs in between scored 94–99%, so expect an occasional miss (section 5) |
 | **Environment** | Python 3.11, LangGraph 1.2.20, LangChain 1.4.9, langchain-openai 1.7.4, langchain-aws 1.9.2, SQLAlchemy 2.1, FastAPI 0.162, Postgres 16 with pgvector 0.8.7, PyJWT 2.15, bcrypt 5.0, Langfuse 4.78 (SDK 5.2) |
 
 The main lesson matched what I'd learned building earlier agent systems: **the LLM proposes, code decides.**
@@ -206,7 +206,7 @@ embeddings passed every case, within an account quota of about 19 Claude calls a
 ### Evaluation suite
 
 The tests script the model, so they check the code around it but can't say how often the real model gets a
-ticket right. `solution/evals` runs 36 labelled tickets through the whole system with the real model, several
+ticket right. `solution/evals` runs 38 labelled tickets through the whole system with the real model, several
 times each:
 
 - **Cases** cover knowledge questions, questions no article answers, account actions (including refused
@@ -415,6 +415,18 @@ Running the full evaluation on Amazon Bedrock (Claude Haiku 4.5, Nova Pro, Titan
 | **Alternatives gained invented reasons.** "You're in Rio, so this could be a great addition to your trip!" | Alternatives are described by their facts only. |
 | **Throttling turned into fallback replies.** The account allows about 19 Claude calls a minute and AWS declined an increase. Retries alone ran out of their budget, and the reply limit (2,048 tokens) counted against the tokens-per-minute quota. | A rate limiter shared by all agents, a 1,024-token reply limit, and adaptive retries. The evaluation now saves each run as it finishes and records the gate's reasoning. |
 | **The judge couldn't stay the same.** On Bedrock it would have been Claude or Nova grading itself. | `UDAHUB_EVAL_JUDGE_PROVIDER` keeps `gpt-4o` judging every model. |
+
+Asking to change a reservation's date on the demo page found these:
+
+| Problem found | Fix |
+|---|---|
+| **The agent cancelled before checking the new date existed.** "Change date", then "27 November": it cancelled the 14 November booking, then said 27 November was "already reserved by you", which was false, and the gate approved it. MASP and Sunset Paddleboarding run on one date only. | `change_reservation` books the new experience and cancels the old one in one transaction, and the agent may only change a date through it. The agent looks up the other dates first. |
+| **An escalated reply hid a booking.** "Book the next available date" was booked, the gate read the request differently and escalated, and the customer was told a specialist would help them book. | The escalation agent is told which actions succeeded, and code adds any the reply leaves out ("Already done: …"). The gate accepts a reasonable reading done and stated plainly. |
+| **The gate escalated "which date would you like?"** with Claude, as if no tool could change a date: it was never told what the agent can do. | The gate's evidence lists the account agent's abilities. |
+| **"It doesn't run on 27 November" couldn't be checked.** Correct with both models, but the gate and the judge wouldn't accept an absence from a list of results. | Search results state every date an experience runs, the others, and `runs_only_on_this_date`; the judge's prompt explains them, as it does `remaining_this_month`. |
+
+Two evaluation cases replay it. Both models pass them (Claude 6 of 6; `gpt-4o-mini` 5 of 6 in the latest full run,
+where one run announced a lookup instead of making it).
 
 Trying the demo page as a customer found this:
 

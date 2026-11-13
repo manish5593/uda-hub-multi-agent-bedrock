@@ -75,6 +75,16 @@ def test_account_tools_work_through_the_service(remote_services):
     assert tools["cancel_my_reservation"].invoke({"reservation_id": "made-up"})["success"] is False
     assert ("cultpass", "POST", f"/customers/{BOB}/reservations") in remote_services
 
+    # Changing a date is one call to the service, which books the new one and cancels the old one together
+    another = next(e for e in experiences if not e["is_premium"] and not e["already_booked"]
+                   and e["experience_id"] != target["experience_id"])
+    moved = tools["change_reservation_date"].invoke({"reservation_id": booked["reservation_id"],
+                                                     "experience_id": another["experience_id"]})
+    assert moved["success"] is True and moved["replaced_reservation_id"] == booked["reservation_id"]
+    statuses = {r["reservation_id"]: r["status"] for r in tools["get_my_reservations"].invoke({})}
+    assert statuses[booked["reservation_id"]] == "cancelled" and statuses[moved["reservation_id"]] == "reserved"
+    assert ("cultpass", "POST", f"/customers/{BOB}/reservations/{booked['reservation_id']}/change") in remote_services
+
 
 # --- Ticket service ---------------------------------------------------------
 

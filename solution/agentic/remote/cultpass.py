@@ -40,3 +40,8 @@ def cancel_reservation(user_id: str, reservation_id: str) -> dict:
 
 def manage_subscription(user_id: str, action: str) -> dict:
     return call("cultpass", "POST", f"/customers/{_id(user_id)}/subscription/{_id(action)}")
+
+
+def change_reservation(user_id: str, reservation_id: str, experience_id: str) -> dict:
+    return call("cultpass", "POST", f"/customers/{_id(user_id)}/reservations/{_id(reservation_id)}/change",
+                json={"experience_id": experience_id})

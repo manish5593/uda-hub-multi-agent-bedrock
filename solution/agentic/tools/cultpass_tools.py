@@ -247,6 +247,64 @@ def cancel_reservation(user_id: str, reservation_id: str) -> dict:
 
 
 @remote("cultpass")
+def change_reservation(user_id: str, reservation_id: str, experience_id: str) -> dict:
+    """Move a reservation to another experience (another date of the same one, usually): the new booking and
+    the cancellation happen in one transaction, so if the new one can't be booked, the old one is kept.
+    Cancelling first and then booking left a customer with neither when the new date didn't exist."""
+    with session_scope(cultpass_engine()) as session:
+        old = session.get(cultpass.Reservation, reservation_id, with_for_update=True)
+        if old is None or old.user_id != user_id:
+            return {"success": False, "error": "Reservation not found for this customer."}
+        if old.status != "reserved":
+            return {"success": False, "error": f"Reservation is already {old.status}."}
+        if old.experience_id == experience_id:
+            return {"success": False, "error": "That is the experience this reservation is already for; nothing to change."}
+        user = old.user
+        exp = session.get(cultpass.Experience, experience_id, with_for_update=True)
+        if exp is None:
+            return {"success": False, "error": "Unknown experience id."}
+        if exp.when < datetime.now():
+            return {"success": False, "error": "That experience has already taken place."}
+        # The same rules as a booking, in the same order (reserve_experience); the reservation kept so far
+        if user.is_blocked:
+            return {"success": False, "error": "Account is blocked; reservations are disabled. The reservation is unchanged."}
+        sub = user.subscription
+        if sub is None or sub.status != "active":
+            return {"success": False, "error": f"Subscription is not active (status: {sub.status if sub else 'none'}). "
+                                               "The reservation is unchanged."}
+        if exp.is_premium and sub.tier != "premium":
+            return {"success": False, "error": "This is a premium experience and the customer is on the basic tier. "
+                                               "The reservation is unchanged."}
+        if exp.slots_available <= 0:
+            return {"success": False, "error": "No slots available for that experience. The reservation is unchanged."}
+        if session.query(cultpass.Reservation).filter_by(user_id=user_id, experience_id=experience_id,
+                                                          status="reserved").first():
+            return {"success": False, "error": "The customer already has a reservation for that experience. "
+                                               "The reservation is unchanged."}
+        # A change uses no extra quota when the old reservation counts towards this month's
+        month_start = datetime.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        freed = 1 if old.created_at and old.created_at >= month_start else 0
+        if _used_this_month(session, user_id) - freed >= sub.monthly_quota:
+            return {"success": False, "error": "Monthly quota already used. The reservation is unchanged."}
+        old.status = "cancelled"
+        old.experience.slots_available += 1
+        new = cultpass.Reservation(reservation_id=str(uuid.uuid4())[:6], user_id=user_id,
+                                   experience_id=experience_id, status="reserved")
+        exp.slots_available -= 1
+        session.add(new)
+        session.flush()
+        return {
+            "success": True,
+            "reservation_id": new.reservation_id,
+            "experience": exp.title,
+            "when": _fmt_dt(exp.when),
+            "replaced_reservation_id": reservation_id,
+            "replaced": f"{old.experience.title}, {_fmt_dt(old.experience.when)}",
+            **_quota_after(session, user_id, sub.monthly_quota),
+        }
+
+
+@remote("cultpass")
 def manage_subscription(user_id: str, action: str) -> dict:
     transitions = {
         "pause": ({"active"}, "paused"),
@@ -309,7 +367,7 @@ def build_account_tools(user_id: str, ticket_id: str, memories: Optional[list[st
         return reservations
 
     def find_experiences(query: str = "", location: str = "") -> list[dict]:
-        """Search upcoming experiences with free slots. `query` matches literal words in the title or description, and `location` matches the city or state; leave both empty to list the whole catalog. Each result says whether the customer has `already_booked` it, and whether they `can_book` it now; when they can't, `cannot_book_because` says why (premium experience on a basic plan, quota used, already booked...)."""
+        """Search upcoming experiences with free slots. `query` matches literal words in the title or description, and `location` matches the city or state; leave both empty to list the whole catalog. Each result says whether the customer has `already_booked` it, and whether they `can_book` it now; when they can't, `cannot_book_because` says why (premium experience on a basic plan, quota used, already booked...). `dates_with_free_slots` lists every date that experience runs with free slots, `other_dates_with_free_slots` the ones besides this one, and `runs_only_on_this_date` is true when there are none: use them to answer a request to change a date."""
         experiences = search_experiences(query=query, location=location)
         booked = {r["experience_id"] for r in list_reservations(user_id) if r["status"] == "reserved"}
         profile = get_customer_profile(user_id)
@@ -319,7 +377,17 @@ def build_account_tools(user_id: str, ticket_id: str, memories: Optional[list[st
             exp["can_book"] = reason is None
             if reason:
                 exp["cannot_book_because"] = reason
+        # Every date each experience runs (each date is its own experience with the same title), so a reply that
+        # says "it only runs on 14 November" or offers another date is backed by the tool result
+        dates = {}
+        for e in (search_experiences() if query or location else experiences):
+            dates.setdefault(e["title"], []).append(e["when"])
         for e in experiences:
+            all_dates = sorted(dates.get(e["title"], [e["when"]]))
+            e["dates_with_free_slots"] = all_dates
+            # Stated outright: the gate and the judge didn't accept "it doesn't run on 27 November" from a list
+            e["other_dates_with_free_slots"] = [d for d in all_dates if d != e["when"]]
+            e["runs_only_on_this_date"] = not e["other_dates_with_free_slots"]
             seen_experience_ids[e["experience_id"]] = f"{e['title']}, {e['when']}"
         return experiences
 
@@ -333,10 +401,21 @@ def build_account_tools(user_id: str, ticket_id: str, memories: Optional[list[st
         return result
 
     def cancel_my_reservation(reservation_id: str) -> dict:
-        """Cancel one of the customer's reservations. Only call after confirming which reservation the customer wants cancelled. The id must come from get_my_reservations."""
+        """Cancel one of the customer's reservations. Only call after confirming which reservation the customer wants cancelled, and only for a cancellation: to change a date, use change_reservation_date, which keeps the reservation if the new date can't be booked. The id must come from get_my_reservations."""
         if reservation_id not in seen_reservation_ids:
             return _unknown_id("reservation", reservation_id, seen_reservation_ids, "get_my_reservations")
         return cancel_reservation(user_id, reservation_id)
+
+    def change_reservation_date(reservation_id: str, experience_id: str) -> dict:
+        """Move one of the customer's reservations to another experience, usually another date of the same one: the new experience is booked and the old reservation cancelled together, and if the new one can't be booked the old reservation is kept. Use it for every change of date or experience; never cancel and rebook separately. reservation_id comes from get_my_reservations, experience_id from find_experiences."""
+        if reservation_id not in seen_reservation_ids:
+            return _unknown_id("reservation", reservation_id, seen_reservation_ids, "get_my_reservations")
+        if experience_id not in seen_experience_ids:
+            return _unknown_id("experience", experience_id, seen_experience_ids, "find_experiences")
+        result = change_reservation(user_id, reservation_id, experience_id)
+        if result.get("success"):
+            seen_reservation_ids[result["reservation_id"]] = f"{result['experience']}, {result['when']}, reserved"
+        return result
 
     def change_subscription(action: Literal["pause", "resume", "cancel"]) -> dict:
         """Pause, resume or cancel the customer's subscription. Only call when the customer explicitly asked for this action."""
@@ -387,6 +466,7 @@ def build_account_tools(user_id: str, ticket_id: str, memories: Optional[list[st
         recommend_experiences,
         book_experience,
         cancel_my_reservation,
+        change_reservation_date,
         change_subscription,
         request_refund,
     ]

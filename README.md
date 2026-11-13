@@ -71,7 +71,7 @@ The same workflow, with the same nodes, prompts, tools and rules, runs in two wa
 
 ![UDA-Hub deployment as microservices](design/deployment.svg)
 
-An evaluation suite ([`solution/evals/`](solution/evals/README.md)) runs 36 labelled tickets against the real model
+An evaluation suite ([`solution/evals/`](solution/evals/README.md)) runs 38 labelled tickets against the real model
 and reports routing, outcome, tool and answer accuracy: **108 of 108 runs passed every check (100%)** with
 `gpt-4o-mini` in each of the last three evaluations, up from 88% at the first, and 108 of 108 with Claude Haiku 4.5
 on Bedrock ([results](#evaluation-results)). Earlier runs scored 94–99%, so expect an occasional miss. GitHub
@@ -242,7 +242,7 @@ python -m pytest service/tests
 
 GitHub Actions runs both suites, with a Postgres 16 service that has pgvector, on every pull request and every push to `main`.
 
-To measure the real model, run the evaluation suite (needs the model settings in `.env`): 36 labelled tickets,
+To measure the real model, run the evaluation suite (needs the model settings in `.env`): 38 labelled tickets,
 3 runs each, scored in code and by an LLM judge. See [`solution/evals/README.md`](solution/evals/README.md).
 
 ```bash
@@ -319,7 +319,7 @@ The model's wording varies from run to run. Before the last two fixes (report se
 
 ### Evaluation results
 
-The evaluation suite runs 36 labelled tickets, 3 times each, with `gpt-4o-mini` running the agents and `gpt-4o`
+The evaluation suite ran 36 labelled tickets, 3 times each, with `gpt-4o-mini` running the agents and `gpt-4o`
 as the judge. The last three evaluations each passed **108 of 108 runs (100%)**, with a median of 4.7 to 5.9
 seconds per message. The first scored 95 of 108 (88%).
 
@@ -334,6 +334,9 @@ same evaluation also passed **108 of 108 runs (100%)**:
 
 Claude's first runs failed three guest how-to questions and four account cases; each was fixed in code that
 works for every model (report section 6), and `gpt-4o-mini` stayed at 100% throughout.
+
+Two cases were added since, for changing a reservation's date (38 in all). With every fix, the latest
+`gpt-4o-mini` evaluation passed 113 of 114 runs (99%); Claude Haiku 4.5 passed both new cases 6 of 6.
 
 | Category | First | Latest | | Check | First | Latest |
 |---|---|---|---|---|---|---|
@@ -369,7 +372,7 @@ mostly from faithfulness failures on correct answers. The details are in [`repor
 | Structured, searchable logs | [`event_log.py`](solution/agentic/event_log.py) writes every decision to `logs/events.jsonl`. Notebook 03 searches it, and the [Logging](design/README.md#logging) section lists the fields. |
 | Error handling and edge cases | `process_ticket()` in [`workflow.py`](solution/agentic/workflow.py). Notebook 03's "Edge cases" cell covers an empty message, gibberish, an unknown customer, an unknown account and an LLM outage. |
 | Safeguards enforced in code | [Safeguards](design/README.md#safeguards-the-llm-proposes-code-decides) |
-| Evaluation over repeated runs | [`solution/evals/`](solution/evals/README.md): 36 labelled tickets, scored in code and by an LLM judge |
+| Evaluation over repeated runs | [`solution/evals/`](solution/evals/README.md): 38 labelled tickets, scored in code and by an LLM judge |
 | Deployment as microservices | [`service/`](service/README.md): an API gateway and five services (including customer sign-up and login with JWTs), Postgres, Alembic migrations, Docker Compose, Prometheus and Grafana |
 
 ## Built With

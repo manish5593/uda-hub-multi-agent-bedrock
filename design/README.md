@@ -164,6 +164,8 @@ Each decision with real consequences is enforced in code rather than left to a p
 | Breaking business rules | Blocked accounts, subscription status, tier, slots, quota and double booking are checked before every change | `reserve_experience`, `manage_subscription` |
 | A tool failure crashing the run | Unexpected tool errors are caught and returned to the agent as a structured error | `_safe` in `cultpass_tools.py` |
 | Promising a refund | Using `request_refund` always escalates, whatever the draft says | `should_escalate`, `ESCALATING_TOOLS` |
+| Losing a booking while changing its date | The new booking and the cancellation happen in one transaction; if the new one can't be booked, the old one is kept | `change_reservation` |
+| An escalated reply hiding what was done | Bookings, cancellations and changes that succeeded in the turn are listed to the escalation agent, and code adds any the reply leaves out | `completed_actions`, `escalate` |
 | Answering a blocked account, legal issue or human request | Routing rules send these to `escalation_agent` before `knowledge_agent` or `account_agent` runs | `route_ticket` |
 | Repeating a fix that already failed | A problem the customer reported before goes straight to a human | `route_ticket`, `repeat_issue_types` |
 | Sending a wrong or unsupported answer | The draft is escalated when it isn't backed by the evidence, the evidence doesn't answer the question, no relevant article was found, or confidence is below 0.7 | `should_escalate`, `KnowledgeRetriever.search` |

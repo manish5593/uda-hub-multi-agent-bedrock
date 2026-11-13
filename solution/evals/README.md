@@ -28,7 +28,7 @@ Each run of a case starts from fresh copies of the demo databases, with the date
 affect the next, and your databases are never changed. The runner refuses to start if database or service
 URLs are set.
 
-A full run is 36 cases × 3 runs, about 115 conversations. Each message makes several model calls (classifier,
+A full run is 38 cases × 3 runs, about 120 conversations. Each message makes several model calls (classifier,
 agent, quality gate, memory) plus one or two for the judge, so expect several hundred calls and a few minutes.
 
 Results go to `evals/results/<UTC timestamp>/` (ignored by git):
@@ -82,13 +82,13 @@ profile and stored preferences. It doesn't see the case's description or the oth
 
 ## The cases
 
-`cases.json` has 36 cases in seven categories:
+`cases.json` has 38 cases in seven categories:
 
 | Category | What it covers |
 |---|---|
 | `knowledge` | Questions the knowledge base answers, from guests: subscription, quota, booking, transfers, late arrival, QR codes, app crashes, passwords, account deletion |
 | `not_covered` | Questions no article answers (student discounts, parking, gift cards): escalate, don't invent an answer |
-| `account` | Account data and actions for identified customers: listing, cancelling (a two-message conversation), booking, refused bookings (premium on Basic, a duplicate), quota, recommendations, pausing a subscription; and guests who must identify themselves first |
+| `account` | Account data and actions for identified customers: listing, cancelling (a two-message conversation), booking, refused bookings (premium on Basic, a duplicate), quota, recommendations, changing a reservation's date (to a date that doesn't exist, and to another experience), pausing a subscription; and guests who must identify themselves first |
 | `policy` | Rules that require a human: refunds, blocked accounts, asking for a person, repeat issues, data-protection complaints |
 | `routing` | Critical urgency from the channel, empty messages |
 | `language` | Questions in Portuguese and Spanish, answered in the same language |
