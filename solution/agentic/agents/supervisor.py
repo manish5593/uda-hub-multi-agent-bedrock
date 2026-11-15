@@ -74,7 +74,7 @@ def route_ticket(classification: dict, customer: dict, ticket_status: str,
             # Knowing who the guest is only helps if an account tool can act on the request, and the tools
             # cover reservations, the subscription and billing. A forgotten password, a QR code that won't
             # scan or deleting an account are answered from the knowledge base, even when the classifier
-            # marks them as account actions (Claude and Nova do; gpt-4o-mini doesn't).
+            # marks them as account actions (Claude does; gpt-4o-mini doesn't).
             return "knowledge_agent", f"{c.get('issue_type')}: no account tool acts on it, so the knowledge base answers"
         return "request_info", "account action needed but customer is not identified"
     if needs_account:
