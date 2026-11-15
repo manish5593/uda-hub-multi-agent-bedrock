@@ -250,6 +250,29 @@ With Langfuse keys set, each verdict is a trace (`udahub-eval-judge-key-points` 
 `udahub-eval-judge-faithfulness`, tagged `eval-judge`) in the session of the ticket it graded, next to the agents'
 own calls, so a failed check can be traced to the prompt, the evidence and the judge's answer.
 
+### Hallucination: how it's prevented
+
+A hallucination is a confident reply the facts don't support: an invented policy, a booking id that doesn't
+exist, "you have 3 left" when the account says 2, or "done" for an action that never ran. A support agent that
+acts on accounts can't afford them, so no single layer is trusted on its own:
+
+| Layer | What it does | Stops |
+|---|---|---|
+| **Answers come from evidence** | The knowledge agent answers only from the articles retrieved for this message (RAG), above a relevance threshold per embedding provider (0.24 Titan, 0.30 OpenAI). With no relevant article it escalates; it may not point customers to sources the articles don't mention | Invented policies, prices and steps |
+| **Account facts come from tools, this turn** | The account agent must check bookings, quota and dates with a tool before stating them; earlier messages say what was true then. A reply that used no tool and asks no question is retried once with tools | Answers from memory or from the conversation |
+| **Ids can't be invented** | Booking, cancelling and changing only accept ids a lookup returned in this turn; an unknown id returns an error listing the valid ones. Ids in the draft are checked against the tool results and corrected | Made-up or miscopied reservation and experience ids |
+| **Tools state the facts outright** | Results say `can_book` and why not, `already_booked`, `remaining_this_month`, `dates_with_free_slots` and `runs_only_on_this_date`, so the model reads facts instead of inferring them | Wrong quota counts, "no other dates" guesses |
+| **Business rules run in code** | Quota, plan, free slots and ownership are enforced by the CultPass service, whatever the model says | "Booked" when the rules forbid it |
+| **Narrow recommendations** | `recommend_experiences` returns only bookable experiences that fit a stored or stated preference; alternatives are described by their facts only | Padded or invented reasons it "suits you" |
+| **Quality gate before sending** | A separate model call checks the draft against the same evidence (`grounded`, `answered_by_evidence`); code escalates to a human if either is false or confidence is low. Claims the evidence contradicts count as ungrounded | Unsupported replies reaching the customer |
+| **Code writes the risky parts** | Routing, whether a human is needed, and the "Already done: ..." line in escalation replies come from code and recorded tool results, not the model. Refunds are registered for approval, never promised | Claimed actions that didn't happen |
+| **Memory keeps only preferences** | Stored memories drop account state, contact details and specific bookings | Stale facts reused as true later |
+
+**Measured, not assumed.** The evaluation's faithfulness judge (above) lists every claim in a sent reply the
+evidence doesn't support; the latest runs had none (100%), and Langfuse traces show the evidence behind each
+reply. Remaining risk: the gate and the judge are models too, so a wrong claim they both miss would get
+through; that is why actions and rules are enforced in code rather than trusted to either.
+
 ## 5. Results
 
 Results from the committed run of notebook 03 against the real model:
