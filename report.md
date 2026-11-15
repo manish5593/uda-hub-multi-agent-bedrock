@@ -215,7 +215,7 @@ times each:
   the articles and the demo customers, and are validated against the values the code uses.
 - **Checks in code:** issue type, route, outcome, escalation team, tool calls, and forbidden text.
 - **Checks by an LLM judge:** whether the reply is supported by the evidence, and whether it makes each case's
-  expected points.
+  expected points (below).
 - **Report:** pass rates per check, category and case; every failed check with its route, outcome and reply;
   and cases that pass in some runs but fail in others.
 
@@ -223,6 +223,32 @@ Each run starts from fresh copies of the databases. A run whose message hit the 
 errored and left out of the rates, and the runner checks every model with one small call before starting. Both
 came from the first real attempt: the course API key had been suspended, and the outage was being scored as
 wrong routes.
+
+### LLM as a judge
+
+Some checks have no exact answer: whether a reply says that unused credits don't roll over, or whether "you have
+2 left" is true. A second model judges those (`solution/evals/judge.py`), with two calls per judged message:
+
+- **Key points.** It sees the customer's messages, the reply and the case's expected points, and returns, for
+  each point, whether the reply makes it and why. It judges meaning, not wording, so replies in any language pass.
+- **Faithfulness.** It sees the reply and the evidence the agents had (the retrieved articles, every tool call
+  and its result, the customer's profile and stored preferences), and lists every factual claim the evidence
+  doesn't support. Greetings, empathy, questions and hedged suggestions aren't claims. Only agent drafts that
+  were sent are judged; escalation messages and fixed replies are written by the system.
+
+The verdicts are structured output (Pydantic `KeyPoints` and `Faithfulness`) at temperature 0, so the runner
+reads them as data. A judge error is reported as *not scored* rather than as the system failing.
+
+The judge is `gpt-4o` for every model under test, set by `UDAHUB_EVAL_JUDGE_PROVIDER` and
+`UDAHUB_EVAL_JUDGE_MODEL`. Two reasons: a model grading itself was unreliable (`gpt-4o-mini` judging
+`gpt-4o-mini` failed 24 of 55 faithfulness checks, mostly on claims a tool result had just confirmed, section 6),
+and keeping one judge makes the OpenAI and Bedrock scores comparable. Every judge failure was read against the
+evidence before being trusted; where the judge was wrong, its prompt now explains what it misread, such as
+`already_booked`, `remaining_this_month`, `runs_only_on_this_date` and an article's suggested phrasing.
+
+With Langfuse keys set, each verdict is a trace (`udahub-eval-judge-key-points` or
+`udahub-eval-judge-faithfulness`, tagged `eval-judge`) in the session of the ticket it graded, next to the agents'
+own calls, so a failed check can be traced to the prompt, the evidence and the judge's answer.
 
 ## 5. Results
 
