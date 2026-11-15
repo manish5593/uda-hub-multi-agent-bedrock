@@ -323,7 +323,6 @@ The same 36 cases ran with Claude Haiku 4.5 on Bedrock and Titan embeddings, jud
 | `gpt-4o-mini` (OpenAI) | 108 / 108 | 5.9 s | The same code, the same day |
 | Claude Haiku 4.5 (Bedrock) | **108 / 108** | 16.7 s | One uninterrupted run, rate-limited to 10 calls a minute |
 | Claude Haiku 4.5 (Bedrock), 38 cases | **114 / 114** | 17.1 s | The final run, after the date-change fixes and the retry with tools |
-| Amazon Nova Pro (Bedrock) | 84 / 101 (83%) | 4.5 s | Earlier code: 7 runs crashed on a bug since fixed, and it wasn't re-run |
 
 Getting there took three kinds of change, all model-neutral, and `gpt-4o-mini` passed every case after each:
 
@@ -404,18 +403,18 @@ cases, then the full evaluation:
 | **"Did my cancellation go through?" was answered from the conversation.** The agent repeated what it said earlier without checking, the gate saw no evidence for it, and the ticket was escalated. Found by re-running notebook 03. | The agent checks the account's current state with a tool before confirming it: earlier messages say what was done then, not what is true now. 5 of 5 targeted runs then checked and resolved it. |
 | **The judge flagged correct replies.** It counted "you might enjoy" as a claim, didn't know what `already_booked` meant, and flagged sentences an article gives as its suggested phrasing. | The judge's prompt covers each, and it sees the customer's stored preferences. Each flag was checked against the evidence first: every one was a correct reply. |
 
-Running the full evaluation on Amazon Bedrock (Claude Haiku 4.5, Nova Pro, Titan embeddings) found these:
+Running the full evaluation on Amazon Bedrock (Claude Haiku 4.5, Titan embeddings) found these:
 
 | Problem found | Fix |
 |---|---|
-| **The agents crashed on Bedrock's replies.** The Converse API can return a reply as a list of content blocks, and every place that treated it as text raised a TypeError (7 crashed runs on Nova Pro). | `text_of()` reads both forms; every agent uses it. |
+| **The agents crashed on Bedrock's replies.** The Converse API can return a reply as a list of content blocks, and every place that treated it as text raised a TypeError. | `text_of()` reads both forms; every agent uses it. |
 | **Titan dropped real answers.** Its scores run lower than OpenAI's: "my card was charged twice" scored 0.26 against the right article, under the 0.30 threshold. | A relevance threshold per embedding provider: 0.24 for Titan, 0.30 for OpenAI, measured against the questions no article covers (Titan's highest: 0.20). |
 | **Claude asked guests for their email instead of answering.** It marked "I forgot my password", "my QR code won't scan" and "delete my account" as account actions (0 of 3 runs each), and routing asks an unknown customer who they are. | Asking who a guest is only helps if an account tool can act on the request (reservations, the subscription, billing); anything else goes to the knowledge agent. |
 | **Correct quota counts failed as unsupported.** After a booking or cancellation, Claude said "you have 2 left", which was right, but no tool result had the number: the judge failed it and the gate escalated cancellations. | Booking and cancelling return the quota left. |
 | **"Samba Night at Lapa" wasn't found.** Claude searched with location "Lapa", which is in the title, not the location, and told Bob it didn't exist instead of that he had booked it. | A location also matches titles and descriptions. |
 | **Alternatives gained invented reasons.** "You're in Rio, so this could be a great addition to your trip!" | Alternatives are described by their facts only. |
 | **Throttling turned into fallback replies.** The account allows about 19 Claude calls a minute and AWS declined an increase. Retries alone ran out of their budget, and the reply limit (2,048 tokens) counted against the tokens-per-minute quota. | A rate limiter shared by all agents, a 1,024-token reply limit, and adaptive retries. The evaluation now saves each run as it finishes and records the gate's reasoning. |
-| **The judge couldn't stay the same.** On Bedrock it would have been Claude or Nova grading itself. | `UDAHUB_EVAL_JUDGE_PROVIDER` keeps `gpt-4o` judging every model. |
+| **The judge couldn't stay the same.** On Bedrock it would have been Claude grading itself. | `UDAHUB_EVAL_JUDGE_PROVIDER` keeps `gpt-4o` judging every model. |
 
 Asking to change a reservation's date on the demo page found these:
 

@@ -331,7 +331,6 @@ same evaluation also passed **108 of 108 runs (100%)**:
 | `gpt-4o-mini` (OpenAI) | 108 / 108 | 5.9 s | |
 | Claude Haiku 4.5 (Bedrock) | 108 / 108 | 16.7 s | Rate-limited to 10 calls a minute to fit the account's quota; most of the time is waiting |
 | Claude Haiku 4.5 (Bedrock), all 38 cases with every fix | **114 / 114** | 17.1 s | The final run, including the date-change cases |
-| Amazon Nova Pro (Bedrock) | 84 / 101 (83%) | 4.5 s | Earlier code; 7 runs crashed on a bug since fixed. Not re-run |
 
 Claude's first runs failed three guest how-to questions and four account cases; each was fixed in code that
 works for every model (report section 6), and `gpt-4o-mini` stayed at 100% throughout.
