@@ -156,6 +156,41 @@ def test_seed_loads_the_demo_data_once(new_db, name):
     engine.dispose()
 
 
+def test_seeded_experiences_start_tomorrow_and_move_dates_refreshes_them(new_db, monkeypatch):
+    """The committed dates go stale: the seed moves them to start tomorrow, and --move-dates does it again on a
+    running database, keeping the experiences' order and spacing."""
+    from datetime import datetime, timedelta
+    url = new_db()
+    upgrade("cultpass", url)
+    seed.seed("cultpass", url)
+    experiences = DATABASES["cultpass"].metadata.tables["experiences"]
+    engine = create_engine(url)
+
+    def dates():
+        with engine.connect() as conn:
+            return dict(conn.execute(select(experiences.c.experience_id, experiences.c.when)).all())
+
+    def gaps(d):
+        first = min(d.values())
+        return {k: v - first for k, v in d.items()}
+
+    seeded = dates()
+    now = datetime.now()
+    assert now < min(seeded.values()) <= now + timedelta(days=1, minutes=1)
+
+    with engine.begin() as conn:  # a month later, every experience has taken place
+        for k, v in seeded.items():
+            conn.execute(experiences.update().where(experiences.c.experience_id == k).values(when=v - timedelta(days=30)))
+    assert max(dates().values()) < now
+
+    monkeypatch.setenv("CULTPASS_DB_URL", url)
+    assert seed.main(["--move-dates"]) == 0
+    moved = dates()
+    assert datetime.now() < min(moved.values()) <= datetime.now() + timedelta(days=1, minutes=1)
+    assert gaps(moved) == gaps(seeded)
+    engine.dispose()
+
+
 def test_local_customers_survive_a_reset_with_their_login(new_db, tmp_path):
     """service/local/customers.json: your own demo customer is added after the demo data, again after
     --reset, never twice, and with a password hash their login comes back in a new auth database."""

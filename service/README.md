@@ -130,12 +130,20 @@ Three one-shot jobs run on every `up`:
 3. `seed` copies the committed demo data from the SQLite files into them (`scripts/seed.py`). It skips any
    table that already has rows, so restarts never overwrite data. It then adds your own demo customers from
    `local/customers.json`, if you made one: git ignores it, and they survive `--reset`, login included
-   ([`local/README.md`](local/README.md)).
+   ([`local/README.md`](local/README.md)). The demo experiences are moved to start tomorrow as they are
+   loaded, so they can always be booked.
 
 The services start only after they succeed. To reload the demo data:
 
 ```bash
 docker compose run --rm seed python -m service.scripts.seed --reset
+```
+
+Once the experiences have taken place on a stack that keeps running, move them to start tomorrow again,
+without reloading anything (bookings, tickets and logins are kept):
+
+```bash
+docker compose run --rm seed python -m service.scripts.seed --move-dates
 ```
 
 Send a message (use the same ticket id for the whole conversation):

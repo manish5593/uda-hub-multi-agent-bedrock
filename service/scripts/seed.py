@@ -13,6 +13,11 @@ The tables come from the Alembic migrations (service/migrations), not from this 
 already has rows is left alone, so running it again never overwrites live data. Use --reset to empty the
 tables first and reload the demo data.
 
+The committed experiences are dated relative to the day notebook 01 last ran, so they go stale. Whenever the
+demo experiences are loaded, their dates are moved to start tomorrow (same order and spacing), as the tests
+and evaluations do with their copies. For a database that is already running, --move-dates does the same
+without reloading anything.
+
 Customers of your own (for a demo on yourself) go in service/local/customers.json, which git ignores
 (see service/local/README.md). They are added after the demo data whenever they're missing, so they
 survive --reset, and with a password hash their login survives a new auth database too.
@@ -58,10 +63,37 @@ def seed(name: str, target_url: str, reset: bool = False) -> dict:
                 if rows:
                     dst.execute(insert(table), rows)
                 copied[table.name] = len(rows)
+            if name == "cultpass" and copied.get("experiences"):
+                move_dates_to_today(dst)
     finally:
         source.dispose()
         target.dispose()
     return copied
+
+
+def move_dates_to_today(conn) -> None:
+    """Move every experience so the earliest starts tomorrow, keeping their order and spacing, and count the
+    reservations toward this month's quota (as agentic.demo_data does for the tests' copies)."""
+    meta = DATABASES["cultpass"].metadata.tables
+    experiences, reservations = meta["experiences"], meta["reservations"]
+    first = conn.execute(select(func.min(experiences.c.when))).scalar()
+    if first is None:
+        return
+    now = datetime.now()
+    shift = now + timedelta(days=1) - first
+    for experience_id, when in conn.execute(select(experiences.c.experience_id, experiences.c.when)).all():
+        conn.execute(experiences.update().where(experiences.c.experience_id == experience_id)
+                     .values(when=when + shift))
+    conn.execute(reservations.update().values(created_at=now))
+
+
+def move_dates(cultpass_url: str) -> None:
+    engine = create_engine(cultpass_url)
+    try:
+        with engine.begin() as conn:
+            move_dates_to_today(conn)
+    finally:
+        engine.dispose()
 
 
 def load_local_customers(path: Path = None) -> list[dict]:
@@ -134,7 +166,16 @@ def main(argv=None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--reset", action="store_true", help="empty the tables and reload the demo data")
+    parser.add_argument("--move-dates", action="store_true",
+                        help="only move the experiences in CULTPASS_DB_URL to start tomorrow; reload nothing")
     args = parser.parse_args(argv)
+    if args.move_dates:
+        if not os.getenv("CULTPASS_DB_URL"):
+            logger.error("Set CULTPASS_DB_URL")
+            return 1
+        move_dates(os.environ["CULTPASS_DB_URL"])
+        logger.info("Experience dates moved to start tomorrow")
+        return 0
     seeded = {name: db for name, db in DATABASES.items() if db.seeded}
     missing = [db.url_env for db in seeded.values() if not os.getenv(db.url_env)]
     if missing:
